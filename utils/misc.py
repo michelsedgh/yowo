@@ -89,6 +89,23 @@ def build_dataset(d_cfg, args, is_train=False):
             version='v2.2'
             )
 
+    elif args.dataset == 'charades_ag':
+        from dataset.charades_ag import CharadesAGDataset
+        data_dir = os.path.join(args.root, 'ActionGenome')
+        
+        # dataset
+        dataset = CharadesAGDataset(
+            cfg=d_cfg,
+            data_root=data_dir,
+            is_train=is_train,
+            img_size=d_cfg['train_size'],
+            transform=augmentation,
+            len_clip=args.len_clip,
+            sampling_rate=d_cfg['sampling_rate']
+        )
+        num_classes = d_cfg['valid_num_classes']
+        evaluator = None # We would need to implement a CharadesAGEvaluator
+
     else:
         print('unknow dataset !! Only support ucf24 & jhmdb21 & ava_v2.2 !!')
         exit(0)

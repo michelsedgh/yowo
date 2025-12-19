@@ -62,6 +62,26 @@ yowo_v2_config = {
         'head_depthwise': False,
     },
 
+    'yowo_v2_medium_yolo11m': {
+        # backbone
+        ## 2D
+        'backbone_2d': 'yolo11m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '2.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+    },
+
     'yowo_v2_large': {
         # backbone
         ## 2D
