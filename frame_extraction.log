@@ -1,0 +1,9 @@
+======================================
+Action Genome Frame Extraction
+======================================
+Extracting videos...
+Videos extracted to /home/michel/yowo/data/ActionGenome/videos/
+Extracting frames using Action Genome's official method...
+
+CondaError: Run 'conda init' before 'conda activate'
+
