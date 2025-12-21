@@ -24,6 +24,7 @@ def get_fps(video_path):
 
 def rich_viz(video_id='001YG', frame_idx='000089'):
     video_id_full = f"{video_id}.mp4"
+    # Check both PNG and JPG for annotation keys
     frame_key = f"{video_id_full}/{frame_idx}.png"
     
     # Paths
@@ -43,7 +44,7 @@ def rich_viz(video_id='001YG', frame_idx='000089'):
     # Load Charades Actions
     active_actions = []
     fps = get_fps(videos_dir / video_id_full)
-    time_sec = int(frame_idx) / fps
+    time_sec = (int(frame_idx) - 1) / fps
 
     with open(ann_dir / 'Charades_v1_train.csv', 'r') as f:
         reader = csv.DictReader(f)
@@ -59,8 +60,11 @@ def rich_viz(video_id='001YG', frame_idx='000089'):
                                 active_actions.append(cls)
                 break
 
-    # 2. Load Image
-    img_path = frames_dir / video_id_full / f"{frame_idx}.png"
+    # 2. Load Image (try JPG first, then PNG)
+    img_path = frames_dir / video_id_full / f"{frame_idx}.jpg"
+    if not img_path.exists():
+        img_path = frames_dir / video_id_full / f"{frame_idx}.png"
+    
     img = cv2.imread(str(img_path))
     if img is None:
         print(f"Error: {img_path} not found")

@@ -23,7 +23,7 @@ def verify_dataset():
         'exposure': 1.5,
         'sampling_rate': 1,
         'multi_hot': True,
-        'valid_num_classes': 222,
+        'valid_num_classes': 219,  # FIXED: 36 objects + 157 actions + 26 relations = 219
     }
     
     # Check if paths exist
@@ -100,7 +100,7 @@ def verify_model():
     m_cfg = build_model_config(args)
     
     device = torch.device('cpu')
-    num_classes = 222
+    num_classes = 219  # FIXED: 36 objects + 157 actions + 26 relations
     
     try:
         model, criterion = build_model(
@@ -119,10 +119,10 @@ def verify_model():
             print(f"Scale {i}: conf {conf.shape}, cls {cls.shape}, box {box.shape}")
             
         # Verify classes
-        if outputs['pred_cls'][0].shape[-1] == 222:
-            print("Output class count matches: 222")
+        if outputs['pred_cls'][0].shape[-1] == 219:
+            print("Output class count matches: 219")
         else:
-            print(f"Error: Output class count is {outputs['pred_cls'][0].shape[-1]}, expected 222")
+            print(f"Error: Output class count is {outputs['pred_cls'][0].shape[-1]}, expected 219")
             
     except Exception as e:
         print(f"Model verification failed: {e}")

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from dataset.charades_ag import CharadesAGDataset
+from dataset.transforms import BaseTransform
 
 def final_verify():
     # Mock config
@@ -17,13 +18,16 @@ def final_verify():
         'sampling_rate': 1
     }
     
+    # Use transform to convert images to tensors
+    transform = BaseTransform(img_size=224)
+    
     # Init Dataset
     dataset = CharadesAGDataset(
         cfg=cfg,
         data_root='/home/michel/yowo/data/ActionGenome',
         is_train=True,
         img_size=224,
-        transform=None,
+        transform=transform,
         len_clip=16,
         sampling_rate=1
     )
@@ -38,18 +42,21 @@ def final_verify():
     for idx in test_indices:
         [video_id, frame_idx], video_clip, target = dataset[idx]
         
-        # Last frame is the keyframe
-        img_pil = video_clip[-1]
-        img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        # Last frame is the keyframe - video_clip is [3, T, H, W]
+        keyframe = video_clip[:, -1, :, :]  # [3, H, W]
+        img_np = keyframe.permute(1, 2, 0).numpy()  # [H, W, 3]
+        img_np = np.clip(img_np, 0, 255).astype(np.uint8)
+        img = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         h, w = img.shape[:2]
         
-        boxes = target['boxes'].numpy()
+        boxes = target['boxes'].numpy()  # normalized coordinates
         labels = target['labels'].numpy()
         
         vis = img.copy()
         
         for i, box in enumerate(boxes):
-            x1, y1, x2, y2 = box.astype(int)
+            # Convert normalized coords to pixels
+            x1, y1, x2, y2 = (box * 224).astype(int)
             label = labels[i]
             
             # Find active classes

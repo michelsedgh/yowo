@@ -155,7 +155,7 @@ class CharadesAGDataset(Dataset):
             
             # 2. Actions: Charades
             fps = self.video_fps.get(video_id_full, 24.0)
-            time_sec = frame_idx / fps
+            time_sec = (frame_idx - 1) / fps
             for cls_idx, start, end in self.video_actions.get(video_id, []):
                 if start <= time_sec <= end:
                     # Indices 36-192 for actions
@@ -164,7 +164,10 @@ class CharadesAGDataset(Dataset):
             # 3. Relationships: Union of all interactions
             for obj in obj_info_list:
                 for r_type in ['attention_relationship', 'spatial_relationship', 'contacting_relationship']:
-                    for r in obj.get(r_type, []):
+                    rel_list = obj.get(r_type, [])
+                    if rel_list is None:
+                        rel_list = []
+                    for r in rel_list:
                         r_norm = self._normalize_rel(r)
                         if r_norm in self.ag_relations:
                             r_idx = self.ag_relations.index(r_norm)
@@ -190,7 +193,10 @@ class CharadesAGDataset(Dataset):
             
             # 2. Relationships specific to this object
             for r_type in ['attention_relationship', 'spatial_relationship', 'contacting_relationship']:
-                for r in obj.get(r_type, []):
+                rel_list = obj.get(r_type, [])
+                if rel_list is None:
+                    rel_list = []
+                for r in rel_list:
                     r_norm = self._normalize_rel(r)
                     if r_norm in self.ag_relations:
                         r_idx = self.ag_relations.index(r_norm)
