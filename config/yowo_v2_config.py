@@ -184,4 +184,53 @@ yowo_v2_config = {
         'head_depthwise': False,
     },
 
+    # =========================================================================
+    # MULTI-TASK Configurations for Action Genome + Charades
+    # These use the three-head architecture (Object/Action/Relation)
+    # =========================================================================
+    
+    # Multi-Task with X3D-S + YOLO11m (RECOMMENDED for Action Genome + Charades)
+    'yowo_v2_x3d_s_yolo11m_multitask': {
+        # backbone
+        ## 2D - YOLO11m for better 2D features
+        'backbone_2d': 'yolo11m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - X3D-S for efficient temporal modeling
+        'backbone_3d': 'x3d_s',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
+    # Multi-Task with X3D-M + YOLO11m (Higher accuracy, slower)
+    'yowo_v2_x3d_m_yolo11m_multitask': {
+        # backbone
+        ## 2D - YOLO11m for better 2D features
+        'backbone_2d': 'yolo11m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - X3D-M for higher temporal accuracy
+        'backbone_3d': 'x3d_m',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
 }

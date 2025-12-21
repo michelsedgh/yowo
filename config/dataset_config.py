@@ -53,6 +53,7 @@ dataset_config = {
         'sampling_rate': 1,
         # cls label
         'multi_hot': True,
+        'multi_task': True,  # Enable three-head architecture
         # train config
         'optimizer': 'adamw',
         'momentum': 0.9,
@@ -60,7 +61,10 @@ dataset_config = {
         'warmup': 'linear',
         'warmup_factor': 0.00066667,
         'wp_iter': 500,
-        # class names
-        'valid_num_classes': 219, # 36 AG objects (incl. person) + 157 Charades actions + 26 AG relationships
+        # class counts (for multi-task architecture)
+        'num_objects': 36,    # AG objects (person + 35 objects)
+        'num_actions': 157,   # Charades action classes
+        'num_relations': 26,  # AG relationship classes
+        'valid_num_classes': 219,  # Total: 36 + 157 + 26 = 219
     }
 }
