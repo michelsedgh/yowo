@@ -3,6 +3,13 @@ import torch.nn as nn
 from ultralytics import YOLO
 
 class YOLO11Backbone(nn.Module):
+    """
+    YOLO11 backbone that extracts multi-scale features for YOWO.
+    
+    The backbone returns features in the same format as FreeYOLO:
+    (cls_feats, reg_feats) - but for YOLO11 we use the same features for both
+    since YOLO11 doesn't have separate cls/reg heads at the backbone level.
+    """
     def __init__(self, model_name='yolo11m.pt', pretrained=True):
         super().__init__()
         # Load the full YOLO11 model
@@ -42,8 +49,11 @@ class YOLO11Backbone(nn.Module):
             # capture our target features
             if i in self.feature_indices:
                 outputs.append(x)
-                
-        return outputs
+        
+        # Return in the same format as FreeYOLO: (cls_feats, reg_feats)
+        # For YOLO11 we use the same features for both cls and reg
+        # The channel encoder in YOWO will handle the fusion with 3D features
+        return outputs, outputs
 
 def build_yolo_11(model_name='yolo11m.pt', pretrained=True):
     model = YOLO11Backbone(model_name, pretrained)
@@ -51,7 +61,7 @@ def build_yolo_11(model_name='yolo11m.pt', pretrained=True):
     # Let's do a dummy forward to be 100% sure of feat_dims
     with torch.no_grad():
         dummy = torch.zeros(1, 3, 224, 224)
-        feats = model(dummy)
-        feat_dims = [f.shape[1] for f in feats]
+        cls_feats, reg_feats = model(dummy)
+        feat_dims = [f.shape[1] for f in cls_feats]
         
     return model, feat_dims
