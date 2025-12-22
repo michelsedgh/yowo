@@ -68,8 +68,8 @@ class CharadesAGDataset(Dataset):
         with open(os.path.join(self.data_root, 'annotations/object_bbox_and_relationship.pkl'), 'rb') as f:
             self.object_data = pickle.load(f)
             
-        # Charades Actions
-        csv_name = 'Charades_v1_train.csv' if self.is_train else 'Charades_v1_test.csv'
+        # Charades Actions (95/5 split - only videos with AG keyframe annotations)
+        csv_name = 'Charades_v1_train_95.csv' if self.is_train else 'Charades_v1_test_5.csv'
         csv_path = os.path.join(self.data_root, 'annotations', csv_name)
         self.video_actions = {}
         with open(csv_path, 'r') as f:
@@ -86,8 +86,12 @@ class CharadesAGDataset(Dataset):
                             actions.append((cls_idx, start, end))
                 self.video_actions[vid] = actions
         
-        # Keyframes
-        self.keyframes = sorted(list(self.person_bboxes.keys()))
+        # Keyframes - filter to only include videos in current split
+        split_video_ids = set(self.video_actions.keys())
+        self.keyframes = sorted([
+            kf for kf in self.person_bboxes.keys() 
+            if kf.split('/')[0].replace('.mp4', '') in split_video_ids
+        ])
         print(f"Loaded {len(self.keyframes)} keyframes for {'train' if self.is_train else 'val'}")
 
     def __len__(self):
