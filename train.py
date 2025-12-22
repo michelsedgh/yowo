@@ -10,6 +10,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.cuda.amp import autocast, GradScaler
 
 from utils import distributed_utils
 from utils.com_flops_params import FLOPs_and_Params
@@ -119,6 +120,10 @@ def parse_args():
                         help='number of distributed processes')
     parser.add_argument('--sybn', action='store_true', default=False, 
                         help='use sybn.')
+    
+    # Mixed Precision Training
+    parser.add_argument('--amp', action='store_true', default=False,
+                        help='use Automatic Mixed Precision (AMP) for faster training and lower memory.')
 
     return parser.parse_args()
 
@@ -206,6 +211,13 @@ def train():
     max_epoch = args.max_epoch
     epoch_size = len(dataloader)
     warmup = True
+    
+    # Mixed Precision Training (AMP)
+    if args.amp:
+        print('Using Automatic Mixed Precision (AMP) training')
+        scaler = GradScaler()
+    else:
+        scaler = None
 
     # eval before training
     if args.eval_first and distributed_utils.is_main_process():
@@ -235,12 +247,16 @@ def train():
             # to device
             video_clips = video_clips.to(device)
 
-            # inference
-            outputs = model(video_clips)
-            
-            # loss
-            loss_dict = criterion(outputs, targets)
-            losses = loss_dict['losses']
+            # inference and loss (with optional AMP)
+            if scaler is not None:
+                with autocast():
+                    outputs = model(video_clips)
+                    loss_dict = criterion(outputs, targets)
+                    losses = loss_dict['losses']
+            else:
+                outputs = model(video_clips)
+                loss_dict = criterion(outputs, targets)
+                losses = loss_dict['losses']
 
             # reduce            
             loss_dict_reduced = distributed_utils.reduce_dict(loss_dict)
@@ -250,13 +266,20 @@ def train():
                 print('loss is NAN !!')
                 continue
 
-            # Backward
-            losses /= accumulate
-            losses.backward()
+            # Backward (with optional AMP scaling)
+            losses = losses / accumulate
+            if scaler is not None:
+                scaler.scale(losses).backward()
+            else:
+                losses.backward()
 
             # Optimize
             if ni % accumulate == 0:
-                optimizer.step()
+                if scaler is not None:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
                 optimizer.zero_grad()
                     
             # Display

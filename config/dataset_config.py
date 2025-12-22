@@ -50,7 +50,11 @@ dataset_config = {
         'hue': 0.1,
         'saturation': 1.5,
         'exposure': 1.5,
-        'sampling_rate': 1,
+        # X3D-M was pretrained at 5fps temporal sampling (X3D-S uses 6fps)
+        # Charades is 24fps, so sampling_rate=5 gives 24/5=4.8fps ≈ 5fps (matches X3D-M)
+        # With len_clip=16: covers 16*5/24 = 3.33 seconds (~27% of avg Charades action)
+        # This is better for long Charades actions + Action Genome relationship understanding
+        'sampling_rate': 5,
         # cls label
         'multi_hot': True,
         'multi_task': True,  # Enable three-head architecture
