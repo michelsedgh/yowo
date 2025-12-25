@@ -31,8 +31,10 @@ class MultiTaskCriterion(object):
     - Object identity (CrossEntropy - exclusive)
     - Actions (BCE - multi-label, Person-only)
     - Relations (BCE - multi-label)
-    - Interaction (BCE - is object being interacted with?)
     - Box regression (GIoU)
+    
+    Note: Interaction loss removed - negative relation classes (notlookingat, notcontacting)
+    already indicate no interaction.
     """
     
     # Indices of "negative" relations that don't count as real interaction
@@ -51,7 +53,7 @@ class MultiTaskCriterion(object):
         self.loss_obj_weight = getattr(args, 'loss_obj_weight', 1.0)
         self.loss_act_weight = getattr(args, 'loss_act_weight', 1.0)
         self.loss_rel_weight = getattr(args, 'loss_rel_weight', 1.0)
-        self.loss_interact_weight = getattr(args, 'loss_interact_weight', 1.0)
+        # Note: loss_interact_weight removed - interaction head no longer exists
         self.loss_reg_weight = args.loss_reg_weight
 
         # Loss functions
@@ -59,7 +61,7 @@ class MultiTaskCriterion(object):
         self.obj_lossf = nn.CrossEntropyLoss(reduction='none')  # For exclusive object classification
         self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')  # For multi-label actions
         self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')  # For multi-label relations
-        self.interact_lossf = nn.BCEWithLogitsLoss(reduction='none')  # For interaction prediction
+        # Note: interact_lossf removed - interaction head no longer exists
             
         # Matcher (uses combined class representation for matching)
         self.matcher = SimOTA(
@@ -99,7 +101,7 @@ class MultiTaskCriterion(object):
         obj_preds = torch.cat(outputs['pred_obj'], dim=1)        # [B, M_total, 36]
         act_preds = torch.cat(outputs['pred_act'], dim=1)        # [B, M_total, 157]
         rel_preds = torch.cat(outputs['pred_rel'], dim=1)        # [B, M_total, 26]
-        interact_preds = torch.cat(outputs['pred_interact'], dim=1)  # [B, M_total, 1]
+        # Note: interact_preds removed - interaction head no longer exists
         box_preds = torch.cat(outputs['pred_box'], dim=1)        # [B, M_total, 4]
         
         # For matcher, we need combined cls_preds
@@ -109,7 +111,6 @@ class MultiTaskCriterion(object):
         obj_targets = []
         act_targets = []
         rel_targets = []
-        interact_targets = []
         box_targets = []
         conf_targets = []
         fg_masks = []
@@ -129,7 +130,6 @@ class MultiTaskCriterion(object):
                 obj_target = conf_preds.new_zeros((0,), dtype=torch.long)
                 act_target = conf_preds.new_zeros((0, self.num_actions))
                 rel_target = conf_preds.new_zeros((0, self.num_relations))
-                interact_target = conf_preds.new_zeros((0, 1))
                 box_target = conf_preds.new_zeros((0, 4))
                 conf_target = conf_preds.new_zeros((num_anchors, 1))
                 fg_mask = conf_preds.new_zeros(num_anchors).bool()
@@ -171,21 +171,11 @@ class MultiTaskCriterion(object):
                 # Person mask: object class 0 is "person"
                 is_person_mask = (obj_target == 0)
                 
-                # Interaction target: 1 if person OR has positive relations
-                # Positive relation = any relation except notlookingat(1), unsure(2), notcontacting(17)
-                positive_rel_mask = rel_target.clone()
-                for neg_idx in self.NEGATIVE_RELATION_INDICES:
-                    if neg_idx < positive_rel_mask.shape[1]:
-                        positive_rel_mask[:, neg_idx] = 0
-                has_positive_relations = positive_rel_mask.sum(dim=-1) > 0  # [num_fg]
-                
-                # Interaction = 1 if person OR has positive interactions
-                interact_target = (is_person_mask | has_positive_relations).float().unsqueeze(-1)
+                # Note: interact_target removed - relation classes include negatives
 
             obj_targets.append(obj_target)
             act_targets.append(act_target)
             rel_targets.append(rel_target)
-            interact_targets.append(interact_target)
             box_targets.append(box_target)
             conf_targets.append(conf_target)
             fg_masks.append(fg_mask)
@@ -195,7 +185,6 @@ class MultiTaskCriterion(object):
         obj_targets = torch.cat(obj_targets, dim=0)          # [total_fg]
         act_targets = torch.cat(act_targets, dim=0)          # [total_fg, 157]
         rel_targets = torch.cat(rel_targets, dim=0)          # [total_fg, 26]
-        interact_targets = torch.cat(interact_targets, dim=0) # [total_fg, 1]
         box_targets = torch.cat(box_targets, dim=0)          # [total_fg, 4]
         conf_targets = torch.cat(conf_targets, dim=0)        # [total_anchors, 1]
         fg_masks = torch.cat(fg_masks, dim=0)                # [total_anchors]
@@ -237,13 +226,7 @@ class MultiTaskCriterion(object):
         else:
             loss_rel = torch.tensor(0.0, device=device)
 
-        # ============ INTERACTION LOSS (BCE) ============
-        matched_interact_preds = interact_preds.view(-1, 1)[fg_masks]  # [num_fg, 1]
-        if len(interact_targets) > 0:
-            loss_interact = self.interact_lossf(matched_interact_preds, interact_targets)
-            loss_interact = loss_interact.sum() / num_foregrounds
-        else:
-            loss_interact = torch.tensor(0.0, device=device)
+        # Note: Interaction loss removed - relation classes include negatives (notlookingat, notcontacting)
 
         # ============ BOX LOSS (GIoU) ============
         matched_box_preds = box_preds.view(-1, 4)[fg_masks]
@@ -259,7 +242,6 @@ class MultiTaskCriterion(object):
             self.loss_obj_weight * loss_obj +
             self.loss_act_weight * loss_act +
             self.loss_rel_weight * loss_rel +
-            self.loss_interact_weight * loss_interact +
             self.loss_reg_weight * loss_box
         )
 
@@ -268,7 +250,6 @@ class MultiTaskCriterion(object):
             loss_obj=loss_obj,
             loss_act=loss_act,
             loss_rel=loss_rel,
-            loss_interact=loss_interact,
             loss_box=loss_box,
             losses=losses
         )

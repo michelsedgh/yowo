@@ -1,0 +1,3 @@
+from .ucf_jhmdb_evaluator import UCF_JHMDB_Evaluator
+from .ava_evaluator import AVA_Evaluator
+from .charades_ag_evaluator import CharadesAGEvaluator
