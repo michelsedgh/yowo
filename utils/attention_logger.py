@@ -114,17 +114,18 @@ class AttentionLogger:
         if targets and len(targets) > 0:
             # Count person vs object boxes
             num_person = 0
-            num_objects = 0
+            num_total = 0
             for target in targets:
                 if 'labels' in target:
                     labels = target['labels']
-                    # Assuming index 0 is person
-                    person_mask = labels[:, 0] > 0.5 if labels.dim() > 1 else False
-                    num_person += person_mask.sum().item() if isinstance(person_mask, torch.Tensor) else 0
-                    num_objects += labels.shape[0] - (num_person if isinstance(person_mask, torch.Tensor) else 0)
+                    num_total += labels.shape[0]
+                    if labels.dim() > 1 and labels.size(-1) >= 36:
+                        # Object class is first 36 dims, class 0 is person
+                        obj_classes = labels[:, :36].argmax(dim=-1)
+                        num_person += (obj_classes == 0).sum().item()
             
             stats['num_person_boxes'] = num_person
-            stats['num_object_boxes'] = num_objects
+            stats['num_total_boxes'] = num_total
         
         return stats
     
