@@ -18,6 +18,20 @@ from utils.misc import CollateFunc, build_dataset, build_dataloader
 from utils.solver.optimizer import build_optimizer
 from utils.solver.warmup_schedule import build_warmup
 
+# Attention logging for multi-task models
+try:
+    from utils.attention_logger import AttentionLogger
+    ATTENTION_LOGGING_AVAILABLE = True
+except ImportError:
+    ATTENTION_LOGGING_AVAILABLE = False
+
+# Cross-attention monitoring for multi-task models
+try:
+    from utils.cross_attention_monitor import CrossAttentionMonitor
+    CROSS_ATTENTION_MONITOR_AVAILABLE = True
+except ImportError:
+    CROSS_ATTENTION_MONITOR_AVAILABLE = False
+
 from config import build_dataset_config, build_model_config
 from models import build_model
 
@@ -219,6 +233,24 @@ def train():
     else:
         scaler = None
 
+    # Initialize attention logger for multi-task models
+    attn_logger = None
+    is_multitask = 'multitask' in args.version.lower()
+    if is_multitask and ATTENTION_LOGGING_AVAILABLE and distributed_utils.is_main_process():
+        print('Initializing attention logger for multi-task model...')
+        attn_logger = AttentionLogger(log_dir=path_to_save, log_frequency=100)
+    
+    # Initialize cross-attention monitor for multi-task models
+    ca_monitor = None
+    if is_multitask and CROSS_ATTENTION_MONITOR_AVAILABLE and distributed_utils.is_main_process():
+        print('Initializing cross-attention monitor for multi-task model...')
+        ca_monitor = CrossAttentionMonitor(
+            model_without_ddp,
+            log_dir=path_to_save,
+            log_interval=100,
+            device=device
+        )
+
     # eval before training
     if args.eval_first and distributed_utils.is_main_process():
         # to check whether the evaluator can work
@@ -289,8 +321,28 @@ def train():
                 print_log(cur_lr, epoch,  max_epoch, iter_i, epoch_size,loss_dict_reduced, t1-t0, accumulate)
             
                 t0 = time.time()
+            
+            # Attention logging for multi-task models
+            if attn_logger is not None and iter_i % 100 == 0:
+                attn_logger.log_attention(model_without_ddp, outputs, targets, epoch, iter_i)
+            
+            # Cross-attention monitoring for multi-task models
+            if ca_monitor is not None:
+                ca_monitor.log_step(video_clips, targets, loss_dict, epoch, iter_i)
 
         lr_scheduler.step()
+        
+        # Save attention epoch summary for multi-task models
+        if attn_logger is not None:
+            attn_logger.save_epoch_summary(epoch)
+            # Do detailed attention analysis once per epoch (on last batch)
+            attn_logger.log_detailed_attention(
+                model_without_ddp, video_clips, targets, epoch, iter_i
+            )
+        
+        # Save cross-attention epoch summary
+        if ca_monitor is not None:
+            ca_monitor.save_epoch_summary(epoch)
         
         # evaluation
         if epoch % args.eval_epoch == 0 or (epoch + 1) == max_epoch:
@@ -318,6 +370,7 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save):
 
         # save model
         print('Saving state, epoch:', epoch + 1)
+        
         weight_name = '{}_epoch_{}.pth'.format(args.version, epoch+1)
         checkpoint_path = os.path.join(path_to_save, weight_name)
         torch.save({'model': model_eval.state_dict(),

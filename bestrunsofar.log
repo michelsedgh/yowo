@@ -979,3 +979,910 @@ Saving state, epoch: 5
 [Epoch: 6/13][Iter: 130/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.55][loss_act: 7.33][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 31.04][time: 52.98]
 [Epoch: 6/13][Iter: 140/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.50][loss_act: 7.64][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.27][losses: 32.19][time: 66.67]
 [Epoch: 6/13][Iter: 150/1713][lr: 0.000350][loss_conf: 2.45][loss_obj: 0.49][loss_act: 7.19][loss_rel: 4.25][loss_interact: 0.00][loss_box: 0.26][losses: 31.34][time: 52.23]
+🔧 Applying fixes...
+✅ Fixed optimizer.py (handles missing optimizer state)
+✅ Fixed build_multitask.py (PyTorch 2.6 compatibility)
+✅ Fixed train.py (LR scheduler advances to correct epoch)
+✅ All fixes applied!
+
+======================================================================
+🚀 RESUMING TRAINING FROM EPOCH 5
+======================================================================
+📦 Batch size: 160 (effective: 320)
+📊 Max epochs: 13
+📈 Base LR: 0.00035
+📉 LR decay at epochs: 7 9 11 12
+
+   ACTUAL LR Schedule (MultiStepLR behavior):
+   Epoch 6/13:  lr = 0.00035   (resuming here)
+   Epoch 7/13:  lr = 0.00035   (still full LR)
+   Epoch 8/13:  lr = 0.000175  (first decay after milestone 7)
+   Epoch 9/13:  lr = 0.000175
+   Epoch 10/13: lr = 0.0000875 (second decay after milestone 9)
+   Epoch 11/13: lr = 0.0000875
+   Epoch 12/13: lr = 0.00004375 (third decay after milestone 11)
+   Epoch 13/13: lr = 0.00002188 (fourth decay after milestone 12)
+
+🎬 Clip length: 16 frames
+⚡ AMP: Enabled
+
+📋 Full command:
+python train.py     -d charades_ag     -v yowo_v2_x3d_m_yolo11m_multitask     --cuda     --amp     -bs 160     -accu 2     --max_epoch 13     --lr_epoch 7 9 11 12     --root /content/yowo/data     -K 16     -lr 0.00035     --num_workers 4     --save_folder /content/yowo/weights     -r /content/yowo/yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth
+
+======================================================================
+Creating new Ultralytics Settings v0.0.6 file ✅ 
+View Ultralytics Settings with 'yolo settings' or at '/root/.config/Ultralytics/settings.json'
+Update Settings with 'yolo settings key=value', i.e. 'yolo settings runs_dir=path/to/dir'. For help see https://docs.ultralytics.com/quickstart/#ultralytics-settings.
+Setting Arguments.. :  Namespace(cuda=True, tfboard=False, save_folder='/content/yowo/weights', vis_data=False, eval=False, eval_epoch=1, save_dir='inference_results/', eval_first=False, batch_size=160, test_batch_size=16, accumulate=2, base_lr=0.00035, lr_decay_ratio=0.5, max_epoch=13, lr_epoch=[7, 9, 11, 12], version='yowo_v2_x3d_m_yolo11m_multitask', resume='/content/yowo/yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth', conf_thresh=0.1, nms_thresh=0.5, topk=40, len_clip=16, freeze_backbone_2d=False, freeze_backbone_3d=False, memory=False, dataset='charades_ag', root='/content/yowo/data', num_workers=4, center_sampling_radius=2.5, topk_candicate=10, loss_conf_weight=1, loss_cls_weight=1, loss_reg_weight=5, focal_loss=False, distributed=False, dist_url='env://', world_size=1, sybn=False, amp=True)
+----------------------------------------------------------
+World size: 1
+use cuda
+==============================
+Dataset Config: CHARADES_AG 
+==============================
+Model Config: YOWO_V2_X3D_M_YOLO11M_MULTITASK 
+Loaded 274086 keyframes for train
+==============================
+Training model on: charades_ag
+The dataset size: 274086
+==============================
+Build YOWO_V2_X3D_M_YOLO11M_MULTITASK (Multi-Task) ...
+  Objects: 36
+  Actions: 157
+  Relations: 26
+==============================
+2D Backbone: YOLO11M
+--pretrained: True
+Downloading https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt to 'yolo11m.pt': 100% ━━━━━━━━━━━━ 38.8MB 97.4MB/s 0.4s
+YOLO11 feature dimensions: [256, 512, 512]
+YOLO11 feature strides: [8, 16, 32]
+==============================
+3D Backbone: X3D_M
+--pretrained: True
+Loading X3D model: x3d_m (pretrained=True)
+Downloading: "https://github.com/facebookresearch/pytorchvideo/zipball/main" to /root/.cache/torch/hub/main.zip
+Downloading: "https://dl.fbaipublicfiles.com/pytorchvideo/model_zoo/kinetics/X3D_M.pyth" to /root/.cache/torch/hub/checkpoints/X3D_M.pyth
+100% 29.4M/29.4M [00:00<00:00, 276MB/s]
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+Resuming from:  /content/yowo/yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth
+==============================
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv3d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm3d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+/usr/local/lib/python3.12/dist-packages/torch/functional.py:505: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4317.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+==============================
+FLOPs : 10.19 G
+Params : 24.86 M
+==============================
+Optimizer: adamw
+--momentum: 0.9
+--weight_decay: 0.0005
+keep training:  /content/yowo/yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth
+No optimizer state in checkpoint, using fresh optimizer
+Resuming from epoch 5
+Advancing LR scheduler by 5 steps to match resumed epoch...
+/usr/local/lib/python3.12/dist-packages/torch/optim/lr_scheduler.py:192: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn(
+LR after advancing: 0.000350
+==============================
+WarmUpScheduler: linear
+--base_lr: 0.00035
+--warmup_factor: 0.00066667
+--wp_iter: 500
+Using Automatic Mixed Precision (AMP) training
+/content/yowo/train.py:225: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+/content/yowo/train.py:259: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/content/yowo/models/yowo/matcher.py:59: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+[Epoch: 6/13][Iter: 0/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.50][loss_act: 7.24][loss_rel: 4.21][loss_interact: 0.00][loss_box: 0.26][losses: 31.40][time: 65.91]
+[Epoch: 6/13][Iter: 10/1713][lr: 0.000350][loss_conf: 2.47][loss_obj: 0.56][loss_act: 7.29][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.29][losses: 31.69][time: 32.66]
+[Epoch: 6/13][Iter: 20/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.46][loss_act: 6.63][loss_rel: 4.08][loss_interact: 0.01][loss_box: 0.27][losses: 29.97][time: 61.93]
+[Epoch: 6/13][Iter: 30/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.45][loss_act: 7.07][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.28][losses: 30.43][time: 67.81]
+[Epoch: 6/13][Iter: 40/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.55][loss_act: 7.36][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 31.09][time: 60.19]
+[Epoch: 6/13][Iter: 50/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.46][loss_act: 7.59][loss_rel: 4.28][loss_interact: 0.00][loss_box: 0.26][losses: 32.08][time: 70.14]
+[Epoch: 6/13][Iter: 60/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.49][loss_act: 6.81][loss_rel: 3.72][loss_interact: 0.00][loss_box: 0.27][losses: 29.56][time: 58.67]
+[Epoch: 6/13][Iter: 70/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.55][loss_act: 6.70][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.27][losses: 30.11][time: 69.68]
+[Epoch: 6/13][Iter: 80/1713][lr: 0.000350][loss_conf: 2.60][loss_obj: 0.57][loss_act: 7.17][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 31.66][time: 58.30]
+[Epoch: 6/13][Iter: 90/1713][lr: 0.000350][loss_conf: 2.49][loss_obj: 0.52][loss_act: 7.34][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.27][losses: 31.81][time: 68.30]
+[Epoch: 6/13][Iter: 100/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.50][loss_act: 6.58][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 29.34][time: 58.78]
+[Epoch: 6/13][Iter: 110/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.56][loss_act: 7.37][loss_rel: 4.35][loss_interact: 0.00][loss_box: 0.26][losses: 31.92][time: 70.33]
+[Epoch: 6/13][Iter: 120/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.56][loss_act: 7.54][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.27][losses: 31.81][time: 57.49]
+[Epoch: 6/13][Iter: 130/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.48][loss_act: 6.90][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.27][losses: 30.39][time: 70.58]
+[Epoch: 6/13][Iter: 140/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.47][loss_act: 7.57][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.25][losses: 31.31][time: 56.72]
+[Epoch: 6/13][Iter: 150/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.55][loss_act: 6.85][loss_rel: 4.27][loss_interact: 0.00][loss_box: 0.26][losses: 30.80][time: 69.09]
+[Epoch: 6/13][Iter: 160/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.46][loss_act: 6.76][loss_rel: 3.76][loss_interact: 0.00][loss_box: 0.25][losses: 29.17][time: 56.01]
+[Epoch: 6/13][Iter: 170/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.50][loss_act: 6.73][loss_rel: 4.24][loss_interact: 0.00][loss_box: 0.27][losses: 30.48][time: 69.96]
+[Epoch: 6/13][Iter: 180/1713][lr: 0.000350][loss_conf: 2.51][loss_obj: 0.59][loss_act: 7.42][loss_rel: 4.37][loss_interact: 0.00][loss_box: 0.27][losses: 32.45][time: 55.95]
+[Epoch: 6/13][Iter: 190/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.50][loss_act: 6.63][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.27][losses: 29.96][time: 68.65]
+[Epoch: 6/13][Iter: 200/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.51][loss_act: 7.07][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.27][losses: 30.70][time: 55.97]
+[Epoch: 6/13][Iter: 210/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.49][loss_act: 6.92][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 30.10][time: 68.61]
+[Epoch: 6/13][Iter: 220/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.55][loss_act: 7.34][loss_rel: 4.14][loss_interact: 0.01][loss_box: 0.27][losses: 31.54][time: 56.45]
+[Epoch: 6/13][Iter: 230/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.50][loss_act: 5.94][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.26][losses: 27.97][time: 67.55]
+[Epoch: 6/13][Iter: 240/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.51][loss_act: 7.37][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 31.44][time: 56.71]
+[Epoch: 6/13][Iter: 250/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.55][loss_act: 7.58][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.25][losses: 31.80][time: 67.88]
+[Epoch: 6/13][Iter: 260/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.51][loss_act: 7.38][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 31.14][time: 54.65]
+[Epoch: 6/13][Iter: 270/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.55][loss_act: 7.31][loss_rel: 4.26][loss_interact: 0.00][loss_box: 0.25][losses: 31.23][time: 69.97]
+[Epoch: 6/13][Iter: 280/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.53][loss_act: 7.50][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 31.68][time: 55.08]
+[Epoch: 6/13][Iter: 290/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.57][loss_act: 6.68][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 29.81][time: 69.93]
+[Epoch: 6/13][Iter: 300/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.60][loss_act: 6.95][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.27][losses: 30.81][time: 55.71]
+[Epoch: 6/13][Iter: 310/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.49][loss_act: 7.51][loss_rel: 4.34][loss_interact: 0.00][loss_box: 0.26][losses: 32.00][time: 69.42]
+[Epoch: 6/13][Iter: 320/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.50][loss_act: 7.09][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.26][losses: 30.52][time: 54.36]
+[Epoch: 6/13][Iter: 330/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.52][loss_act: 7.07][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 30.76][time: 69.09]
+[Epoch: 6/13][Iter: 340/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.55][loss_act: 7.27][loss_rel: 4.37][loss_interact: 0.00][loss_box: 0.27][losses: 31.88][time: 54.60]
+[Epoch: 6/13][Iter: 350/1713][lr: 0.000350][loss_conf: 2.47][loss_obj: 0.53][loss_act: 7.07][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.27][losses: 31.15][time: 68.80]
+[Epoch: 6/13][Iter: 360/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.50][loss_act: 6.69][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.27][losses: 29.56][time: 54.31]
+[Epoch: 6/13][Iter: 370/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.51][loss_act: 7.41][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.28][losses: 31.72][time: 68.35]
+[Epoch: 6/13][Iter: 380/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.48][loss_act: 6.40][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.27][losses: 29.40][time: 53.64]
+[Epoch: 6/13][Iter: 390/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.52][loss_act: 7.20][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.27][losses: 30.87][time: 69.71]
+[Epoch: 6/13][Iter: 400/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.54][loss_act: 7.34][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.27][losses: 31.48][time: 53.93]
+[Epoch: 6/13][Iter: 410/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.55][loss_act: 7.58][loss_rel: 4.29][loss_interact: 0.00][loss_box: 0.26][losses: 32.25][time: 69.79]
+[Epoch: 6/13][Iter: 420/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.56][loss_act: 7.31][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.27][losses: 30.86][time: 54.48]
+[Epoch: 6/13][Iter: 430/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.58][loss_act: 7.11][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 30.66][time: 68.39]
+[Epoch: 6/13][Iter: 440/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.52][loss_act: 7.60][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.27][losses: 32.03][time: 54.36]
+[Epoch: 6/13][Iter: 450/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.53][loss_act: 7.04][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 30.57][time: 68.91]
+[Epoch: 6/13][Iter: 460/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.55][loss_act: 7.39][loss_rel: 4.49][loss_interact: 0.00][loss_box: 0.28][losses: 32.38][time: 55.04]
+[Epoch: 6/13][Iter: 470/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.50][loss_act: 7.35][loss_rel: 4.30][loss_interact: 0.00][loss_box: 0.26][losses: 31.50][time: 67.44]
+[Epoch: 6/13][Iter: 480/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.54][loss_act: 7.10][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.28][losses: 31.23][time: 54.14]
+[Epoch: 6/13][Iter: 490/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.52][loss_act: 6.82][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 30.15][time: 69.78]
+[Epoch: 6/13][Iter: 500/1713][lr: 0.000350][loss_conf: 2.45][loss_obj: 0.51][loss_act: 6.82][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.26][losses: 30.63][time: 54.81]
+[Epoch: 6/13][Iter: 510/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.54][loss_act: 7.27][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.27][losses: 30.97][time: 67.68]
+[Epoch: 6/13][Iter: 520/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.43][loss_act: 7.46][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 31.31][time: 55.95]
+[Epoch: 6/13][Iter: 530/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.53][loss_act: 7.33][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.26][losses: 31.47][time: 68.94]
+[Epoch: 6/13][Iter: 540/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.52][loss_act: 6.98][loss_rel: 4.45][loss_interact: 0.00][loss_box: 0.27][losses: 31.29][time: 54.63]
+[Epoch: 6/13][Iter: 550/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.47][loss_act: 7.23][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 30.74][time: 69.39]
+[Epoch: 6/13][Iter: 560/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.49][loss_act: 6.82][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.25][losses: 30.13][time: 54.23]
+[Epoch: 6/13][Iter: 570/1713][lr: 0.000350][loss_conf: 2.55][loss_obj: 0.55][loss_act: 7.35][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 31.80][time: 68.59]
+[Epoch: 6/13][Iter: 580/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.47][loss_act: 7.01][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.27][losses: 30.42][time: 54.95]
+[Epoch: 6/13][Iter: 590/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.53][loss_act: 6.71][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.27][losses: 29.91][time: 68.38]
+[Epoch: 6/13][Iter: 600/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.51][loss_act: 7.25][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.27][losses: 31.18][time: 53.81]
+[Epoch: 6/13][Iter: 610/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.52][loss_act: 7.38][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.27][losses: 31.44][time: 69.50]
+[Epoch: 6/13][Iter: 620/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.51][loss_act: 7.78][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.26][losses: 31.38][time: 54.35]
+[Epoch: 6/13][Iter: 630/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.48][loss_act: 6.78][loss_rel: 4.35][loss_interact: 0.00][loss_box: 0.26][losses: 30.55][time: 70.32]
+[Epoch: 6/13][Iter: 640/1713][lr: 0.000350][loss_conf: 2.44][loss_obj: 0.57][loss_act: 6.75][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.27][losses: 30.69][time: 56.13]
+[Epoch: 6/13][Iter: 650/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.47][loss_act: 7.33][loss_rel: 4.27][loss_interact: 0.00][loss_box: 0.26][losses: 31.57][time: 69.47]
+[Epoch: 6/13][Iter: 660/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.46][loss_act: 7.28][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.24][losses: 30.87][time: 55.52]
+[Epoch: 6/13][Iter: 670/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.48][loss_act: 6.89][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.26][losses: 29.96][time: 68.43]
+[Epoch: 6/13][Iter: 680/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.47][loss_act: 6.67][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 29.79][time: 56.22]
+[Epoch: 6/13][Iter: 690/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.48][loss_act: 6.68][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.26][losses: 30.09][time: 68.86]
+[Epoch: 6/13][Iter: 700/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.53][loss_act: 6.90][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.26][losses: 30.77][time: 54.44]
+[Epoch: 6/13][Iter: 710/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.56][loss_act: 7.16][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.26][losses: 31.27][time: 69.10]
+[Epoch: 6/13][Iter: 720/1713][lr: 0.000350][loss_conf: 2.58][loss_obj: 0.56][loss_act: 7.53][loss_rel: 4.30][loss_interact: 0.00][loss_box: 0.27][losses: 32.59][time: 54.26]
+[Epoch: 6/13][Iter: 730/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.54][loss_act: 6.68][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.26][losses: 30.01][time: 69.64]
+[Epoch: 6/13][Iter: 740/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.45][loss_act: 7.14][loss_rel: 4.27][loss_interact: 0.00][loss_box: 0.25][losses: 30.97][time: 54.17]
+[Epoch: 6/13][Iter: 750/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.48][loss_act: 6.57][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 29.75][time: 68.94]
+[Epoch: 6/13][Iter: 760/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.51][loss_act: 7.13][loss_rel: 4.41][loss_interact: 0.00][loss_box: 0.26][losses: 31.44][time: 53.75]
+[Epoch: 6/13][Iter: 770/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.51][loss_act: 7.10][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.26][losses: 30.92][time: 67.94]
+[Epoch: 6/13][Iter: 780/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.51][loss_act: 7.40][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.25][losses: 31.22][time: 53.99]
+[Epoch: 6/13][Iter: 790/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.58][loss_act: 7.71][loss_rel: 4.35][loss_interact: 0.00][loss_box: 0.26][losses: 32.67][time: 68.13]
+[Epoch: 6/13][Iter: 800/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.52][loss_act: 6.93][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.27][losses: 30.54][time: 57.52]
+[Epoch: 6/13][Iter: 810/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.53][loss_act: 7.03][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.25][losses: 30.48][time: 68.51]
+[Epoch: 6/13][Iter: 820/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.51][loss_act: 6.72][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.25][losses: 29.66][time: 54.75]
+[Epoch: 6/13][Iter: 830/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.52][loss_act: 7.46][loss_rel: 4.21][loss_interact: 0.00][loss_box: 0.27][losses: 31.95][time: 68.62]
+[Epoch: 6/13][Iter: 840/1713][lr: 0.000350][loss_conf: 2.54][loss_obj: 0.54][loss_act: 6.60][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 30.17][time: 53.40]
+[Epoch: 6/13][Iter: 850/1713][lr: 0.000350][loss_conf: 2.46][loss_obj: 0.49][loss_act: 6.75][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.25][losses: 30.00][time: 68.42]
+[Epoch: 6/13][Iter: 860/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.50][loss_act: 7.14][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 30.49][time: 53.81]
+[Epoch: 6/13][Iter: 870/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.48][loss_act: 6.77][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 30.05][time: 68.22]
+[Epoch: 6/13][Iter: 880/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.53][loss_act: 6.58][loss_rel: 4.26][loss_interact: 0.00][loss_box: 0.25][losses: 29.97][time: 54.80]
+[Epoch: 6/13][Iter: 890/1713][lr: 0.000350][loss_conf: 2.45][loss_obj: 0.56][loss_act: 7.27][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.27][losses: 31.29][time: 67.81]
+[Epoch: 6/13][Iter: 900/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.50][loss_act: 6.79][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 29.98][time: 53.93]
+[Epoch: 6/13][Iter: 910/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.56][loss_act: 7.50][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.27][losses: 32.16][time: 69.44]
+[Epoch: 6/13][Iter: 920/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.49][loss_act: 6.98][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.26][losses: 30.43][time: 54.44]
+[Epoch: 6/13][Iter: 930/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.57][loss_act: 6.70][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 30.12][time: 68.60]
+[Epoch: 6/13][Iter: 940/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.50][loss_act: 6.73][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 30.30][time: 55.01]
+[Epoch: 6/13][Iter: 950/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.56][loss_act: 7.13][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.26][losses: 30.79][time: 69.57]
+[Epoch: 6/13][Iter: 960/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.48][loss_act: 6.88][loss_rel: 3.88][loss_interact: 0.01][loss_box: 0.25][losses: 29.45][time: 54.80]
+[Epoch: 6/13][Iter: 970/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.51][loss_act: 6.69][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.27][losses: 29.67][time: 69.25]
+[Epoch: 6/13][Iter: 980/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.48][loss_act: 7.11][loss_rel: 3.78][loss_interact: 0.00][loss_box: 0.25][losses: 29.87][time: 54.58]
+[Epoch: 6/13][Iter: 990/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.43][loss_act: 6.75][loss_rel: 3.79][loss_interact: 0.00][loss_box: 0.24][losses: 28.82][time: 69.32]
+[Epoch: 6/13][Iter: 1000/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.40][loss_act: 7.08][loss_rel: 3.69][loss_interact: 0.00][loss_box: 0.25][losses: 29.41][time: 57.07]
+[Epoch: 6/13][Iter: 1010/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.53][loss_act: 7.49][loss_rel: 4.32][loss_interact: 0.00][loss_box: 0.26][losses: 32.06][time: 68.53]
+[Epoch: 6/13][Iter: 1020/1713][lr: 0.000350][loss_conf: 2.50][loss_obj: 0.54][loss_act: 7.82][loss_rel: 4.26][loss_interact: 0.00][loss_box: 0.26][losses: 32.87][time: 53.70]
+[Epoch: 6/13][Iter: 1030/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.48][loss_act: 6.91][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 30.10][time: 68.26]
+[Epoch: 6/13][Iter: 1040/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.55][loss_act: 6.61][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 29.56][time: 55.15]
+[Epoch: 6/13][Iter: 1050/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.48][loss_act: 6.65][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.26][losses: 29.57][time: 69.00]
+[Epoch: 6/13][Iter: 1060/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.55][loss_act: 7.04][loss_rel: 3.79][loss_interact: 0.00][loss_box: 0.25][losses: 29.84][time: 53.60]
+[Epoch: 6/13][Iter: 1070/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.48][loss_act: 7.41][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 30.97][time: 68.74]
+[Epoch: 6/13][Iter: 1080/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.55][loss_act: 6.98][loss_rel: 4.25][loss_interact: 0.00][loss_box: 0.26][losses: 30.86][time: 53.77]
+[Epoch: 6/13][Iter: 1090/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.47][loss_act: 7.30][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.27][losses: 30.88][time: 68.03]
+[Epoch: 6/13][Iter: 1100/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.48][loss_act: 7.13][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 30.72][time: 53.98]
+[Epoch: 6/13][Iter: 1110/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.49][loss_act: 7.19][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.26][losses: 31.19][time: 68.31]
+[Epoch: 6/13][Iter: 1120/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.60][loss_act: 7.16][loss_rel: 4.25][loss_interact: 0.00][loss_box: 0.27][losses: 31.39][time: 54.86]
+[Epoch: 6/13][Iter: 1130/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.49][loss_act: 7.33][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 31.23][time: 68.54]
+[Epoch: 6/13][Iter: 1140/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.53][loss_act: 7.40][loss_rel: 4.26][loss_interact: 0.00][loss_box: 0.26][losses: 31.67][time: 54.01]
+[Epoch: 6/13][Iter: 1150/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.62][loss_act: 8.00][loss_rel: 4.25][loss_interact: 0.00][loss_box: 0.26][losses: 33.11][time: 68.88]
+[Epoch: 6/13][Iter: 1160/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.54][loss_act: 7.40][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 31.51][time: 54.00]
+[Epoch: 6/13][Iter: 1170/1713][lr: 0.000350][loss_conf: 2.45][loss_obj: 0.53][loss_act: 6.92][loss_rel: 4.30][loss_interact: 0.00][loss_box: 0.28][losses: 31.17][time: 68.33]
+[Epoch: 6/13][Iter: 1180/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.50][loss_act: 7.22][loss_rel: 4.41][loss_interact: 0.00][loss_box: 0.26][losses: 31.69][time: 55.23]
+[Epoch: 6/13][Iter: 1190/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.49][loss_act: 6.38][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.26][losses: 28.98][time: 68.49]
+[Epoch: 6/13][Iter: 1200/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.52][loss_act: 6.50][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.27][losses: 29.21][time: 54.51]
+[Epoch: 6/13][Iter: 1210/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.47][loss_act: 6.91][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.27][losses: 30.20][time: 69.52]
+[Epoch: 6/13][Iter: 1220/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.54][loss_act: 7.47][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 31.27][time: 54.26]
+[Epoch: 6/13][Iter: 1230/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.53][loss_act: 6.37][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 29.23][time: 69.21]
+[Epoch: 6/13][Iter: 1240/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.44][loss_act: 6.61][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 29.48][time: 58.58]
+[Epoch: 6/13][Iter: 1250/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.53][loss_act: 6.91][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.26][losses: 30.44][time: 69.08]
+[Epoch: 6/13][Iter: 1260/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.50][loss_act: 6.90][loss_rel: 4.38][loss_interact: 0.00][loss_box: 0.26][losses: 30.91][time: 54.70]
+[Epoch: 6/13][Iter: 1270/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.44][loss_act: 7.03][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 30.61][time: 68.54]
+[Epoch: 6/13][Iter: 1280/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.56][loss_act: 7.11][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.25][losses: 30.45][time: 53.20]
+[Epoch: 6/13][Iter: 1290/1713][lr: 0.000350][loss_conf: 2.56][loss_obj: 0.51][loss_act: 7.25][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.27][losses: 31.43][time: 69.63]
+[Epoch: 6/13][Iter: 1300/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.54][loss_act: 6.71][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.26][losses: 30.28][time: 54.73]
+[Epoch: 6/13][Iter: 1310/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.43][loss_act: 5.90][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.26][losses: 27.69][time: 68.86]
+[Epoch: 6/13][Iter: 1320/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.47][loss_act: 6.57][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.25][losses: 29.11][time: 54.17]
+[Epoch: 6/13][Iter: 1330/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.47][loss_act: 6.48][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.26][losses: 28.72][time: 68.90]
+[Epoch: 6/13][Iter: 1340/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.45][loss_act: 6.99][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 30.09][time: 54.42]
+[Epoch: 6/13][Iter: 1350/1713][lr: 0.000350][loss_conf: 2.43][loss_obj: 0.56][loss_act: 7.39][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.27][losses: 31.94][time: 68.19]
+[Epoch: 6/13][Iter: 1360/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.51][loss_act: 7.50][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 31.32][time: 54.59]
+[Epoch: 6/13][Iter: 1370/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.49][loss_act: 6.43][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.26][losses: 29.13][time: 68.30]
+[Epoch: 6/13][Iter: 1380/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.49][loss_act: 6.13][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 28.14][time: 54.56]
+[Epoch: 6/13][Iter: 1390/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.55][loss_act: 6.90][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.26][losses: 29.94][time: 66.94]
+[Epoch: 6/13][Iter: 1400/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.48][loss_act: 6.97][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 29.55][time: 54.97]
+[Epoch: 6/13][Iter: 1410/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.45][loss_act: 6.91][loss_rel: 4.19][loss_interact: 0.00][loss_box: 0.25][losses: 30.20][time: 67.46]
+[Epoch: 6/13][Iter: 1420/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.54][loss_act: 7.02][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 30.16][time: 54.30]
+[Epoch: 6/13][Iter: 1430/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.50][loss_act: 6.61][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.25][losses: 29.19][time: 68.49]
+[Epoch: 6/13][Iter: 1440/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.52][loss_act: 6.78][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.24][losses: 29.97][time: 54.30]
+[Epoch: 6/13][Iter: 1450/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.52][loss_act: 7.25][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.26][losses: 30.98][time: 67.98]
+[Epoch: 6/13][Iter: 1460/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.56][loss_act: 6.53][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.26][losses: 29.50][time: 53.72]
+[Epoch: 6/13][Iter: 1470/1713][lr: 0.000350][loss_conf: 2.51][loss_obj: 0.51][loss_act: 7.13][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.27][losses: 31.03][time: 68.01]
+[Epoch: 6/13][Iter: 1480/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.55][loss_act: 6.84][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 30.00][time: 53.70]
+[Epoch: 6/13][Iter: 1490/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.49][loss_act: 6.54][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 29.09][time: 68.60]
+[Epoch: 6/13][Iter: 1500/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.50][loss_act: 7.14][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 30.33][time: 53.47]
+[Epoch: 6/13][Iter: 1510/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.51][loss_act: 6.88][loss_rel: 4.39][loss_interact: 0.00][loss_box: 0.26][losses: 30.82][time: 68.24]
+[Epoch: 6/13][Iter: 1520/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.57][loss_act: 7.00][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.26][losses: 31.16][time: 55.15]
+[Epoch: 6/13][Iter: 1530/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.54][loss_act: 6.96][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 30.49][time: 68.36]
+[Epoch: 6/13][Iter: 1540/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.47][loss_act: 6.79][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.25][losses: 29.48][time: 54.53]
+[Epoch: 6/13][Iter: 1550/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.42][loss_act: 6.80][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 29.74][time: 72.68]
+[Epoch: 6/13][Iter: 1560/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.51][loss_act: 6.18][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.25][losses: 28.62][time: 55.68]
+[Epoch: 6/13][Iter: 1570/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.49][loss_act: 7.29][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.27][losses: 31.05][time: 68.80]
+[Epoch: 6/13][Iter: 1580/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.57][loss_act: 6.89][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.26][losses: 30.33][time: 54.48]
+[Epoch: 6/13][Iter: 1590/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.53][loss_act: 6.73][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.26][losses: 29.68][time: 68.25]
+[Epoch: 6/13][Iter: 1600/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.51][loss_act: 7.23][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.27][losses: 31.39][time: 54.27]
+[Epoch: 6/13][Iter: 1610/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.50][loss_act: 7.30][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 30.63][time: 68.10]
+[Epoch: 6/13][Iter: 1620/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.46][loss_act: 7.39][loss_rel: 4.22][loss_interact: 0.01][loss_box: 0.26][losses: 31.46][time: 53.80]
+[Epoch: 6/13][Iter: 1630/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.47][loss_act: 7.11][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 30.23][time: 67.74]
+[Epoch: 6/13][Iter: 1640/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.55][loss_act: 6.76][loss_rel: 4.21][loss_interact: 0.00][loss_box: 0.26][losses: 30.15][time: 54.42]
+[Epoch: 6/13][Iter: 1650/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.49][loss_act: 6.93][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 30.25][time: 67.05]
+[Epoch: 6/13][Iter: 1660/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.52][loss_act: 6.70][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.26][losses: 30.07][time: 53.94]
+[Epoch: 6/13][Iter: 1670/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.47][loss_act: 6.89][loss_rel: 3.79][loss_interact: 0.00][loss_box: 0.25][losses: 29.33][time: 67.34]
+[Epoch: 6/13][Iter: 1680/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.45][loss_act: 6.48][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.25][losses: 28.66][time: 54.55]
+[Epoch: 6/13][Iter: 1690/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.49][loss_act: 6.36][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.27][losses: 29.06][time: 69.16]
+[Epoch: 6/13][Iter: 1700/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.46][loss_act: 6.51][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.25][losses: 29.42][time: 53.40]
+[Epoch: 6/13][Iter: 1710/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.55][loss_act: 6.97][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.25][losses: 30.14][time: 66.51]
+No evaluator ... save model and go on training.
+Saving state, epoch: 6
+[Epoch: 7/13][Iter: 0/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.54][loss_act: 7.04][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 30.73][time: 35.90]
+[Epoch: 7/13][Iter: 10/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.55][loss_act: 7.00][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 30.66][time: 53.82]
+[Epoch: 7/13][Iter: 20/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.44][loss_act: 6.65][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 29.26][time: 65.35]
+[Epoch: 7/13][Iter: 30/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.49][loss_act: 6.38][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 29.22][time: 55.73]
+[Epoch: 7/13][Iter: 40/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.49][loss_act: 6.74][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 29.82][time: 66.72]
+[Epoch: 7/13][Iter: 50/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.47][loss_act: 6.42][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 29.36][time: 52.71]
+[Epoch: 7/13][Iter: 60/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.50][loss_act: 6.27][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.26][losses: 28.47][time: 67.41]
+[Epoch: 7/13][Iter: 70/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.46][loss_act: 6.81][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.26][losses: 30.05][time: 53.87]
+[Epoch: 7/13][Iter: 80/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.51][loss_act: 6.65][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.26][losses: 29.68][time: 67.96]
+[Epoch: 7/13][Iter: 90/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.52][loss_act: 6.87][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 30.03][time: 53.34]
+[Epoch: 7/13][Iter: 100/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.49][loss_act: 6.68][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.26][losses: 29.69][time: 65.98]
+[Epoch: 7/13][Iter: 110/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.49][loss_act: 6.76][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 29.97][time: 53.15]
+[Epoch: 7/13][Iter: 120/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.52][loss_act: 6.05][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.25][losses: 27.90][time: 66.33]
+[Epoch: 7/13][Iter: 130/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.48][loss_act: 6.47][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.28][losses: 28.99][time: 53.89]
+[Epoch: 7/13][Iter: 140/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.45][loss_act: 6.49][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 29.17][time: 68.72]
+[Epoch: 7/13][Iter: 150/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.50][loss_act: 6.04][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.26][losses: 28.26][time: 52.05]
+[Epoch: 7/13][Iter: 160/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.49][loss_act: 6.89][loss_rel: 3.71][loss_interact: 0.00][loss_box: 0.26][losses: 29.22][time: 67.63]
+[Epoch: 7/13][Iter: 170/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.49][loss_act: 6.81][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.24][losses: 29.53][time: 53.90]
+[Epoch: 7/13][Iter: 180/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.55][loss_act: 7.16][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 30.91][time: 66.28]
+[Epoch: 7/13][Iter: 190/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.49][loss_act: 6.50][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.24][losses: 28.86][time: 53.88]
+[Epoch: 7/13][Iter: 200/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.54][loss_act: 6.83][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.25][losses: 29.93][time: 66.50]
+[Epoch: 7/13][Iter: 210/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.48][loss_act: 6.88][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.26][losses: 30.01][time: 61.26]
+[Epoch: 7/13][Iter: 220/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.48][loss_act: 6.66][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.26][losses: 30.10][time: 66.93]
+[Epoch: 7/13][Iter: 230/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.48][loss_act: 6.50][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.25][losses: 29.28][time: 54.23]
+[Epoch: 7/13][Iter: 240/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.52][loss_act: 7.03][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 30.45][time: 65.05]
+[Epoch: 7/13][Iter: 250/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.51][loss_act: 6.64][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 29.59][time: 56.34]
+[Epoch: 7/13][Iter: 260/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.49][loss_act: 6.66][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 28.96][time: 64.39]
+[Epoch: 7/13][Iter: 270/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.53][loss_act: 6.65][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.26][losses: 29.36][time: 57.23]
+[Epoch: 7/13][Iter: 280/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.42][loss_act: 6.59][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.27][losses: 29.46][time: 65.06]
+[Epoch: 7/13][Iter: 290/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.54][loss_act: 6.79][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 29.86][time: 56.12]
+[Epoch: 7/13][Iter: 300/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.44][loss_act: 6.84][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.27][losses: 29.73][time: 67.40]
+[Epoch: 7/13][Iter: 310/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.44][loss_act: 6.46][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 28.84][time: 54.24]
+[Epoch: 7/13][Iter: 320/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.50][loss_act: 6.58][loss_rel: 4.28][loss_interact: 0.00][loss_box: 0.27][losses: 30.19][time: 67.95]
+[Epoch: 7/13][Iter: 330/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.44][loss_act: 5.76][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 27.57][time: 55.12]
+[Epoch: 7/13][Iter: 340/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.40][loss_act: 5.74][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 26.72][time: 67.86]
+[Epoch: 7/13][Iter: 350/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.46][loss_act: 6.91][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.26][losses: 29.91][time: 55.07]
+[Epoch: 7/13][Iter: 360/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.50][loss_act: 6.49][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 29.21][time: 67.47]
+[Epoch: 7/13][Iter: 370/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.54][loss_act: 6.99][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 30.24][time: 54.30]
+[Epoch: 7/13][Iter: 380/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.49][loss_act: 6.24][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.27][losses: 28.78][time: 67.53]
+[Epoch: 7/13][Iter: 390/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.45][loss_act: 6.72][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 29.38][time: 54.30]
+[Epoch: 7/13][Iter: 400/1713][lr: 0.000350][loss_conf: 2.42][loss_obj: 0.54][loss_act: 6.52][loss_rel: 3.97][loss_interact: 0.01][loss_box: 0.25][losses: 29.47][time: 66.91]
+[Epoch: 7/13][Iter: 410/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.51][loss_act: 6.93][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 30.18][time: 54.70]
+[Epoch: 7/13][Iter: 420/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.52][loss_act: 7.20][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.25][losses: 30.67][time: 68.19]
+[Epoch: 7/13][Iter: 430/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.47][loss_act: 6.06][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 28.29][time: 54.56]
+[Epoch: 7/13][Iter: 440/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.49][loss_act: 6.34][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.25][losses: 28.48][time: 70.13]
+[Epoch: 7/13][Iter: 450/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.57][loss_act: 7.22][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.26][losses: 30.89][time: 54.41]
+[Epoch: 7/13][Iter: 460/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.53][loss_act: 6.75][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 29.82][time: 68.07]
+[Epoch: 7/13][Iter: 470/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.51][loss_act: 6.07][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.27][losses: 28.74][time: 54.40]
+[Epoch: 7/13][Iter: 480/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.42][loss_act: 6.40][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.26][losses: 29.29][time: 68.68]
+[Epoch: 7/13][Iter: 490/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.55][loss_act: 6.96][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 30.39][time: 55.88]
+[Epoch: 7/13][Iter: 500/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.43][loss_act: 6.29][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 28.79][time: 69.02]
+[Epoch: 7/13][Iter: 510/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.45][loss_act: 6.11][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.26][losses: 27.72][time: 54.45]
+[Epoch: 7/13][Iter: 520/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.54][loss_act: 6.57][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.25][losses: 29.75][time: 68.69]
+[Epoch: 7/13][Iter: 530/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.52][loss_act: 6.71][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.27][losses: 29.84][time: 55.70]
+[Epoch: 7/13][Iter: 540/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.51][loss_act: 6.52][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.25][losses: 28.89][time: 69.72]
+[Epoch: 7/13][Iter: 550/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.46][loss_act: 6.33][loss_rel: 4.21][loss_interact: 0.00][loss_box: 0.25][losses: 28.94][time: 55.21]
+[Epoch: 7/13][Iter: 560/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.51][loss_act: 6.18][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 28.68][time: 70.67]
+[Epoch: 7/13][Iter: 570/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.56][loss_act: 6.90][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.25][losses: 30.58][time: 55.04]
+[Epoch: 7/13][Iter: 580/1713][lr: 0.000350][loss_conf: 2.41][loss_obj: 0.63][loss_act: 7.10][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 31.23][time: 71.09]
+[Epoch: 7/13][Iter: 590/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.53][loss_act: 6.54][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.27][losses: 29.61][time: 55.33]
+[Epoch: 7/13][Iter: 600/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.54][loss_act: 6.52][loss_rel: 4.02][loss_interact: 0.00][loss_box: 0.26][losses: 29.28][time: 70.65]
+[Epoch: 7/13][Iter: 610/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.50][loss_act: 6.64][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 29.50][time: 55.33]
+[Epoch: 7/13][Iter: 620/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.53][loss_act: 6.86][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.25][losses: 29.97][time: 69.65]
+[Epoch: 7/13][Iter: 630/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.48][loss_act: 6.14][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.26][losses: 28.13][time: 55.43]
+[Epoch: 7/13][Iter: 640/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.51][loss_act: 6.63][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 29.79][time: 69.66]
+[Epoch: 7/13][Iter: 650/1713][lr: 0.000350][loss_conf: 2.50][loss_obj: 0.53][loss_act: 6.45][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.26][losses: 29.85][time: 54.88]
+[Epoch: 7/13][Iter: 660/1713][lr: 0.000350][loss_conf: 2.40][loss_obj: 0.46][loss_act: 6.47][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 29.23][time: 70.94]
+[Epoch: 7/13][Iter: 670/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.56][loss_act: 6.75][loss_rel: 4.44][loss_interact: 0.00][loss_box: 0.26][losses: 30.70][time: 53.97]
+[Epoch: 7/13][Iter: 680/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.49][loss_act: 6.45][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 29.16][time: 77.81]
+[Epoch: 7/13][Iter: 690/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.43][loss_act: 6.40][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.25][losses: 28.75][time: 54.62]
+[Epoch: 7/13][Iter: 700/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.51][loss_act: 7.07][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.25][losses: 29.96][time: 68.22]
+[Epoch: 7/13][Iter: 710/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.21][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.25][losses: 27.84][time: 55.49]
+[Epoch: 7/13][Iter: 720/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.51][loss_act: 6.19][loss_rel: 3.67][loss_interact: 0.00][loss_box: 0.26][losses: 27.86][time: 69.58]
+[Epoch: 7/13][Iter: 730/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.41][loss_act: 6.51][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.25][losses: 28.88][time: 55.43]
+[Epoch: 7/13][Iter: 740/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.42][loss_act: 6.88][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.26][losses: 29.74][time: 70.22]
+[Epoch: 7/13][Iter: 750/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.52][loss_act: 6.67][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 29.16][time: 55.94]
+[Epoch: 7/13][Iter: 760/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 6.51][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 28.95][time: 68.16]
+[Epoch: 7/13][Iter: 770/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.47][loss_act: 6.81][loss_rel: 4.15][loss_interact: 0.01][loss_box: 0.26][losses: 29.95][time: 55.56]
+[Epoch: 7/13][Iter: 780/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.41][loss_act: 6.47][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 28.56][time: 68.25]
+[Epoch: 7/13][Iter: 790/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.49][loss_act: 6.83][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.24][losses: 29.74][time: 54.90]
+[Epoch: 7/13][Iter: 800/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.47][loss_act: 6.49][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 29.11][time: 68.61]
+[Epoch: 7/13][Iter: 810/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.60][loss_act: 6.78][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 30.38][time: 55.22]
+[Epoch: 7/13][Iter: 820/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.53][loss_act: 6.76][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 29.89][time: 68.56]
+[Epoch: 7/13][Iter: 830/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.45][loss_act: 6.43][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.25][losses: 28.50][time: 56.09]
+[Epoch: 7/13][Iter: 840/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.53][loss_act: 6.30][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.26][losses: 28.32][time: 67.53]
+[Epoch: 7/13][Iter: 850/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.46][loss_act: 6.53][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 28.61][time: 57.38]
+[Epoch: 7/13][Iter: 860/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.55][loss_act: 6.47][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.27][losses: 28.95][time: 65.08]
+[Epoch: 7/13][Iter: 870/1713][lr: 0.000350][loss_conf: 2.38][loss_obj: 0.51][loss_act: 6.94][loss_rel: 4.32][loss_interact: 0.00][loss_box: 0.26][losses: 30.86][time: 58.64]
+[Epoch: 7/13][Iter: 880/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.53][loss_act: 6.42][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 29.10][time: 65.97]
+[Epoch: 7/13][Iter: 890/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.57][loss_act: 6.64][loss_rel: 4.28][loss_interact: 0.00][loss_box: 0.26][losses: 30.41][time: 58.08]
+[Epoch: 7/13][Iter: 900/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.48][loss_act: 6.77][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.26][losses: 29.23][time: 64.80]
+[Epoch: 7/13][Iter: 910/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.48][loss_act: 7.07][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.25][losses: 30.56][time: 58.91]
+[Epoch: 7/13][Iter: 920/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.51][loss_act: 6.96][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 30.34][time: 64.12]
+[Epoch: 7/13][Iter: 930/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.46][loss_act: 7.27][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.27][losses: 30.88][time: 59.83]
+[Epoch: 7/13][Iter: 940/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.46][loss_act: 6.57][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.24][losses: 28.73][time: 64.24]
+[Epoch: 7/13][Iter: 950/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.44][loss_act: 5.94][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.25][losses: 27.49][time: 60.12]
+[Epoch: 7/13][Iter: 960/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.49][loss_act: 6.02][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.25][losses: 27.31][time: 64.26]
+[Epoch: 7/13][Iter: 970/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.48][loss_act: 6.41][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.25][losses: 28.77][time: 61.41]
+[Epoch: 7/13][Iter: 980/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.50][loss_act: 6.76][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 30.04][time: 63.51]
+[Epoch: 7/13][Iter: 990/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.49][loss_act: 6.58][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.25][losses: 29.49][time: 61.18]
+[Epoch: 7/13][Iter: 1000/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.46][loss_act: 6.23][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.28][losses: 28.56][time: 63.54]
+[Epoch: 7/13][Iter: 1010/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.55][loss_act: 6.80][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.26][losses: 29.87][time: 59.50]
+[Epoch: 7/13][Iter: 1020/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 6.69][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.26][losses: 29.17][time: 64.28]
+[Epoch: 7/13][Iter: 1030/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.49][loss_act: 6.76][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 29.38][time: 59.46]
+[Epoch: 7/13][Iter: 1040/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 7.04][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 29.98][time: 62.72]
+[Epoch: 7/13][Iter: 1050/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.52][loss_act: 6.64][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 29.11][time: 60.96]
+[Epoch: 7/13][Iter: 1060/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.49][loss_act: 6.13][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.26][losses: 28.96][time: 64.53]
+[Epoch: 7/13][Iter: 1070/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.53][loss_act: 6.14][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 28.57][time: 60.93]
+[Epoch: 7/13][Iter: 1080/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.51][loss_act: 6.62][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 29.27][time: 61.98]
+[Epoch: 7/13][Iter: 1090/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.49][loss_act: 7.02][loss_rel: 4.53][loss_interact: 0.00][loss_box: 0.27][losses: 31.34][time: 64.36]
+[Epoch: 7/13][Iter: 1100/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.47][loss_act: 7.04][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.25][losses: 30.03][time: 60.96]
+[Epoch: 7/13][Iter: 1110/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.46][loss_act: 6.59][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.26][losses: 29.01][time: 64.53]
+[Epoch: 7/13][Iter: 1120/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.46][loss_act: 6.71][loss_rel: 3.80][loss_interact: 0.01][loss_box: 0.25][losses: 29.04][time: 60.96]
+[Epoch: 7/13][Iter: 1130/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.51][loss_act: 6.81][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.27][losses: 30.49][time: 63.14]
+[Epoch: 7/13][Iter: 1140/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.44][loss_act: 6.51][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 28.75][time: 61.19]
+[Epoch: 7/13][Iter: 1150/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.60][loss_act: 6.49][loss_rel: 4.24][loss_interact: 0.00][loss_box: 0.26][losses: 29.99][time: 63.57]
+[Epoch: 7/13][Iter: 1160/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.51][loss_act: 6.89][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 29.96][time: 60.41]
+[Epoch: 7/13][Iter: 1170/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.37][loss_act: 6.15][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.26][losses: 27.77][time: 64.66]
+[Epoch: 7/13][Iter: 1180/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.47][loss_act: 6.05][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 28.24][time: 59.61]
+[Epoch: 7/13][Iter: 1190/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.48][loss_act: 6.38][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 28.82][time: 65.58]
+[Epoch: 7/13][Iter: 1200/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.51][loss_act: 6.99][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.25][losses: 29.78][time: 59.56]
+[Epoch: 7/13][Iter: 1210/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.52][loss_act: 7.21][loss_rel: 4.19][loss_interact: 0.00][loss_box: 0.26][losses: 31.15][time: 64.65]
+[Epoch: 7/13][Iter: 1220/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.45][loss_act: 6.31][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.24][losses: 28.45][time: 59.70]
+[Epoch: 7/13][Iter: 1230/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.40][loss_act: 6.50][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 28.93][time: 64.96]
+[Epoch: 7/13][Iter: 1240/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.48][loss_act: 6.35][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.25][losses: 28.96][time: 59.49]
+[Epoch: 7/13][Iter: 1250/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.47][loss_act: 6.49][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 29.43][time: 65.25]
+[Epoch: 7/13][Iter: 1260/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.43][loss_act: 6.50][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.26][losses: 28.67][time: 58.88]
+[Epoch: 7/13][Iter: 1270/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.49][loss_act: 6.45][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.27][losses: 29.12][time: 75.64]
+[Epoch: 7/13][Iter: 1280/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.50][loss_act: 6.58][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 29.09][time: 58.16]
+[Epoch: 7/13][Iter: 1290/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.44][loss_act: 6.56][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 29.51][time: 66.01]
+[Epoch: 7/13][Iter: 1300/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.46][loss_act: 6.42][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 28.48][time: 57.31]
+[Epoch: 7/13][Iter: 1310/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.44][loss_act: 6.75][loss_rel: 4.19][loss_interact: 0.00][loss_box: 0.25][losses: 29.81][time: 65.85]
+[Epoch: 7/13][Iter: 1320/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.44][loss_act: 6.96][loss_rel: 4.28][loss_interact: 0.00][loss_box: 0.25][losses: 30.34][time: 58.36]
+[Epoch: 7/13][Iter: 1330/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.45][loss_act: 6.46][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.25][losses: 29.00][time: 68.10]
+[Epoch: 7/13][Iter: 1340/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.47][loss_act: 6.75][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.26][losses: 29.59][time: 56.00]
+[Epoch: 7/13][Iter: 1350/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.49][loss_act: 6.16][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.27][losses: 28.85][time: 68.20]
+[Epoch: 7/13][Iter: 1360/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.49][loss_act: 6.33][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.26][losses: 28.41][time: 55.38]
+[Epoch: 7/13][Iter: 1370/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.43][loss_act: 6.82][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.26][losses: 29.12][time: 69.10]
+[Epoch: 7/13][Iter: 1380/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.48][loss_act: 6.58][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.26][losses: 29.40][time: 55.92]
+[Epoch: 7/13][Iter: 1390/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.53][loss_act: 6.31][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.24][losses: 28.98][time: 69.88]
+[Epoch: 7/13][Iter: 1400/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.51][loss_act: 6.57][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 29.06][time: 55.07]
+[Epoch: 7/13][Iter: 1410/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.42][loss_act: 6.71][loss_rel: 3.64][loss_interact: 0.00][loss_box: 0.25][losses: 28.37][time: 69.81]
+[Epoch: 7/13][Iter: 1420/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.58][loss_act: 6.47][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.26][losses: 28.85][time: 55.57]
+[Epoch: 7/13][Iter: 1430/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.46][loss_act: 6.86][loss_rel: 3.63][loss_interact: 0.00][loss_box: 0.25][losses: 29.19][time: 69.98]
+[Epoch: 7/13][Iter: 1440/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.43][loss_act: 6.46][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.25][losses: 29.18][time: 55.27]
+[Epoch: 7/13][Iter: 1450/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.49][loss_act: 6.90][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 30.05][time: 69.74]
+[Epoch: 7/13][Iter: 1460/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.46][loss_act: 6.95][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 29.96][time: 56.03]
+[Epoch: 7/13][Iter: 1470/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.50][loss_act: 6.80][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 29.74][time: 69.82]
+[Epoch: 7/13][Iter: 1480/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.41][loss_act: 6.20][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.25][losses: 28.10][time: 55.40]
+[Epoch: 7/13][Iter: 1490/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.50][loss_act: 6.36][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 28.66][time: 70.20]
+[Epoch: 7/13][Iter: 1500/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.42][loss_act: 6.38][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.25][losses: 28.68][time: 56.03]
+[Epoch: 7/13][Iter: 1510/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.46][loss_act: 6.56][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 29.25][time: 69.56]
+[Epoch: 7/13][Iter: 1520/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.45][loss_act: 6.17][loss_rel: 3.81][loss_interact: 0.00][loss_box: 0.25][losses: 27.85][time: 55.98]
+[Epoch: 7/13][Iter: 1530/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.50][loss_act: 6.65][loss_rel: 4.14][loss_interact: 0.00][loss_box: 0.26][losses: 29.69][time: 70.15]
+[Epoch: 7/13][Iter: 1540/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.54][loss_act: 6.67][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 29.94][time: 55.43]
+[Epoch: 7/13][Iter: 1550/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.48][loss_act: 6.76][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.26][losses: 29.29][time: 70.49]
+[Epoch: 7/13][Iter: 1560/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.51][loss_act: 6.50][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.25][losses: 28.59][time: 56.37]
+[Epoch: 7/13][Iter: 1570/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.52][loss_act: 6.20][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.26][losses: 28.89][time: 70.17]
+[Epoch: 7/13][Iter: 1580/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.43][loss_act: 6.56][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.24][losses: 29.28][time: 55.28]
+[Epoch: 7/13][Iter: 1590/1713][lr: 0.000350][loss_conf: 2.39][loss_obj: 0.48][loss_act: 7.19][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 30.91][time: 71.08]
+[Epoch: 7/13][Iter: 1600/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.46][loss_act: 6.29][loss_rel: 4.22][loss_interact: 0.00][loss_box: 0.25][losses: 28.91][time: 56.45]
+[Epoch: 7/13][Iter: 1610/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.49][loss_act: 6.01][loss_rel: 4.32][loss_interact: 0.00][loss_box: 0.26][losses: 28.76][time: 71.19]
+[Epoch: 7/13][Iter: 1620/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.48][loss_act: 6.51][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.27][losses: 29.47][time: 57.11]
+[Epoch: 7/13][Iter: 1630/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.51][loss_act: 6.30][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 28.93][time: 70.97]
+[Epoch: 7/13][Iter: 1640/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.45][loss_act: 6.68][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 29.56][time: 55.25]
+[Epoch: 7/13][Iter: 1650/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.42][loss_act: 5.95][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.25][losses: 27.90][time: 70.46]
+[Epoch: 7/13][Iter: 1660/1713][lr: 0.000350][loss_conf: 2.35][loss_obj: 0.45][loss_act: 6.73][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.24][losses: 29.43][time: 56.95]
+[Epoch: 7/13][Iter: 1670/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.48][loss_act: 6.66][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 29.37][time: 70.98]
+[Epoch: 7/13][Iter: 1680/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.51][loss_act: 6.55][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.26][losses: 28.69][time: 56.34]
+[Epoch: 7/13][Iter: 1690/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.56][loss_act: 6.65][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.25][losses: 29.35][time: 70.65]
+[Epoch: 7/13][Iter: 1700/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.49][loss_act: 6.05][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 27.92][time: 55.56]
+[Epoch: 7/13][Iter: 1710/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.43][loss_act: 6.69][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.26][losses: 29.74][time: 69.69]
+No evaluator ... save model and go on training.
+Saving state, epoch: 7
+[Epoch: 8/13][Iter: 0/1713][lr: 0.000175][loss_conf: 2.28][loss_obj: 0.41][loss_act: 6.00][loss_rel: 3.78][loss_interact: 0.00][loss_box: 0.26][losses: 27.55][time: 33.87]
+
+
+
+
+
+
+
+
+
+
+
+🧹 Cleaning up duplicate fixes and applying fresh ones...
+✅ Fixed optimizer.py
+✅ Fixed train.py (Cleaned all duplicate steps)
+\n======================================================================
+🚀 RUNNING: Resume at Epoch 8 | LR: 0.00035 | Milestones: 8 10 12 13
+======================================================================\n
+Setting Arguments.. :  Namespace(cuda=True, tfboard=False, save_folder='/content/yowo/weights', vis_data=False, eval=False, eval_epoch=1, save_dir='inference_results/', eval_first=False, batch_size=160, test_batch_size=16, accumulate=2, base_lr=0.00035, lr_decay_ratio=0.5, max_epoch=13, lr_epoch=[8, 10, 12, 13], version='yowo_v2_x3d_m_yolo11m_multitask', resume='/content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_7.pth', conf_thresh=0.1, nms_thresh=0.5, topk=40, len_clip=16, freeze_backbone_2d=False, freeze_backbone_3d=False, memory=False, dataset='charades_ag', root='/content/yowo/data', num_workers=4, center_sampling_radius=2.5, topk_candicate=10, loss_conf_weight=1, loss_cls_weight=1, loss_reg_weight=5, focal_loss=False, distributed=False, dist_url='env://', world_size=1, sybn=False, amp=True)
+----------------------------------------------------------
+World size: 1
+use cuda
+==============================
+Dataset Config: CHARADES_AG 
+==============================
+Model Config: YOWO_V2_X3D_M_YOLO11M_MULTITASK 
+Loaded 274086 keyframes for train
+==============================
+Training model on: charades_ag
+The dataset size: 274086
+==============================
+Build YOWO_V2_X3D_M_YOLO11M_MULTITASK (Multi-Task) ...
+  Objects: 36
+  Actions: 157
+  Relations: 26
+==============================
+2D Backbone: YOLO11M
+--pretrained: True
+YOLO11 feature dimensions: [256, 512, 512]
+YOLO11 feature strides: [8, 16, 32]
+==============================
+3D Backbone: X3D_M
+--pretrained: True
+Loading X3D model: x3d_m (pretrained=True)
+Using cache found in /root/.cache/torch/hub/facebookresearch_pytorchvideo_main
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+Resuming from:  /content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_7.pth
+==============================
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv3d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm3d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+/usr/local/lib/python3.12/dist-packages/torch/functional.py:505: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4317.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+==============================
+FLOPs : 10.19 G
+Params : 24.86 M
+==============================
+Optimizer: adamw
+--momentum: 0.9
+--weight_decay: 0.0005
+keep training:  /content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_7.pth
+⚠️ No optimizer state found, starting fresh
+✅ Resuming from epoch 7
+Advancing LR scheduler by 7 steps...
+/usr/local/lib/python3.12/dist-packages/torch/optim/lr_scheduler.py:192: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn(
+Current Learning Rate: 0.000350
+==============================
+WarmUpScheduler: linear
+--base_lr: 0.00035
+--warmup_factor: 0.00066667
+--wp_iter: 500
+Using Automatic Mixed Precision (AMP) training
+/content/yowo/train.py:225: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+/content/yowo/train.py:259: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/content/yowo/models/yowo/matcher.py:59: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+[Epoch: 8/13][Iter: 0/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.47][loss_act: 6.73][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 29.56][time: 63.84]
+[Epoch: 8/13][Iter: 10/1713][lr: 0.000350][loss_conf: 2.31][loss_obj: 0.49][loss_act: 6.73][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.26][losses: 29.69][time: 30.11]
+[Epoch: 8/13][Iter: 20/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.48][loss_act: 6.31][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 28.51][time: 52.63]
+[Epoch: 8/13][Iter: 30/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.43][loss_act: 6.10][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.25][losses: 28.35][time: 64.65]
+[Epoch: 8/13][Iter: 40/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.43][loss_act: 6.16][loss_rel: 3.66][loss_interact: 0.00][loss_box: 0.25][losses: 27.27][time: 53.35]
+[Epoch: 8/13][Iter: 50/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.74][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 29.19][time: 65.45]
+[Epoch: 8/13][Iter: 60/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.52][loss_act: 7.13][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 29.88][time: 52.83]
+[Epoch: 8/13][Iter: 70/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.46][loss_act: 5.93][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 27.18][time: 65.32]
+[Epoch: 8/13][Iter: 80/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.41][loss_act: 6.25][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.25][losses: 27.89][time: 52.49]
+[Epoch: 8/13][Iter: 90/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.51][loss_act: 6.41][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 28.72][time: 64.91]
+[Epoch: 8/13][Iter: 100/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.46][loss_act: 5.84][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 27.48][time: 52.71]
+[Epoch: 8/13][Iter: 110/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.45][loss_act: 5.82][loss_rel: 3.59][loss_interact: 0.00][loss_box: 0.26][losses: 26.61][time: 65.72]
+[Epoch: 8/13][Iter: 120/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.45][loss_act: 6.43][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.25][losses: 28.63][time: 52.14]
+[Epoch: 8/13][Iter: 130/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.49][loss_act: 6.11][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 28.51][time: 64.71]
+[Epoch: 8/13][Iter: 140/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.50][loss_act: 6.58][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 29.62][time: 53.23]
+[Epoch: 8/13][Iter: 150/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.57][loss_act: 6.10][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 28.70][time: 64.37]
+[Epoch: 8/13][Iter: 160/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.47][loss_act: 6.24][loss_rel: 3.71][loss_interact: 0.00][loss_box: 0.25][losses: 27.86][time: 54.44]
+[Epoch: 8/13][Iter: 170/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.45][loss_act: 6.90][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 29.67][time: 63.07]
+[Epoch: 8/13][Iter: 180/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.52][loss_act: 6.16][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.27][losses: 28.83][time: 56.01]
+[Epoch: 8/13][Iter: 190/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.44][loss_act: 6.49][loss_rel: 3.63][loss_interact: 0.00][loss_box: 0.26][losses: 28.08][time: 61.82]
+[Epoch: 8/13][Iter: 200/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.51][loss_act: 6.09][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 28.23][time: 56.28]
+[Epoch: 8/13][Iter: 210/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.41][loss_act: 5.86][loss_rel: 3.62][loss_interact: 0.00][loss_box: 0.25][losses: 26.68][time: 62.64]
+[Epoch: 8/13][Iter: 220/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.53][loss_act: 6.69][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.26][losses: 29.99][time: 56.43]
+[Epoch: 8/13][Iter: 230/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.46][loss_act: 7.14][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.25][losses: 29.78][time: 73.00]
+[Epoch: 8/13][Iter: 240/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.45][loss_act: 6.38][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.25][losses: 29.13][time: 57.00]
+[Epoch: 8/13][Iter: 250/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.41][loss_act: 5.69][loss_rel: 3.69][loss_interact: 0.00][loss_box: 0.25][losses: 26.33][time: 61.06]
+[Epoch: 8/13][Iter: 260/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.41][loss_act: 6.11][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.25][losses: 27.95][time: 58.19]
+[Epoch: 8/13][Iter: 270/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.46][loss_act: 6.53][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 28.71][time: 61.26]
+[Epoch: 8/13][Iter: 280/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.52][loss_act: 6.61][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 29.21][time: 57.39]
+[Epoch: 8/13][Iter: 290/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.48][loss_act: 6.01][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.26][losses: 27.59][time: 61.10]
+[Epoch: 8/13][Iter: 300/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.48][loss_act: 6.15][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 27.93][time: 57.26]
+[Epoch: 8/13][Iter: 310/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.44][loss_act: 6.83][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 29.82][time: 60.84]
+[Epoch: 8/13][Iter: 320/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.49][loss_act: 6.10][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.26][losses: 28.06][time: 57.27]
+[Epoch: 8/13][Iter: 330/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.48][loss_act: 6.03][loss_rel: 4.01][loss_interact: 0.00][loss_box: 0.27][losses: 28.11][time: 61.64]
+[Epoch: 8/13][Iter: 340/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.40][loss_act: 6.62][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.25][losses: 28.50][time: 56.53]
+[Epoch: 8/13][Iter: 350/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.51][loss_act: 6.04][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 28.02][time: 61.76]
+[Epoch: 8/13][Iter: 360/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.44][loss_act: 6.74][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.25][losses: 29.34][time: 56.88]
+[Epoch: 8/13][Iter: 370/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.44][loss_act: 6.14][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 28.52][time: 62.36]
+[Epoch: 8/13][Iter: 380/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.50][loss_act: 6.13][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.25][losses: 27.81][time: 57.85]
+[Epoch: 8/13][Iter: 390/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.48][loss_act: 6.28][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 28.36][time: 60.89]
+[Epoch: 8/13][Iter: 400/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.45][loss_act: 5.79][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 27.17][time: 59.29]
+[Epoch: 8/13][Iter: 410/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.49][loss_act: 5.98][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 28.00][time: 60.48]
+[Epoch: 8/13][Iter: 420/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.41][loss_act: 5.98][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.24][losses: 27.38][time: 59.63]
+[Epoch: 8/13][Iter: 430/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.46][loss_act: 6.36][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 28.48][time: 59.91]
+[Epoch: 8/13][Iter: 440/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.44][loss_act: 5.83][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 27.49][time: 61.03]
+[Epoch: 8/13][Iter: 450/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.51][loss_act: 6.05][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.26][losses: 28.28][time: 58.74]
+[Epoch: 8/13][Iter: 460/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.44][loss_act: 5.81][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.26][losses: 27.17][time: 62.37]
+[Epoch: 8/13][Iter: 470/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.52][loss_act: 6.39][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 28.63][time: 59.33]
+[Epoch: 8/13][Iter: 480/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.53][loss_act: 6.36][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 28.58][time: 60.92]
+[Epoch: 8/13][Iter: 490/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.45][loss_act: 6.54][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 29.08][time: 59.66]
+[Epoch: 8/13][Iter: 500/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.45][loss_act: 7.06][loss_rel: 4.12][loss_interact: 0.00][loss_box: 0.25][losses: 30.25][time: 61.39]
+[Epoch: 8/13][Iter: 510/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 6.13][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 28.02][time: 59.70]
+[Epoch: 8/13][Iter: 520/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.58][loss_act: 6.27][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.26][losses: 29.05][time: 61.33]
+[Epoch: 8/13][Iter: 530/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.42][loss_act: 6.19][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.25][losses: 27.73][time: 61.38]
+[Epoch: 8/13][Iter: 540/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.45][loss_act: 6.12][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.25][losses: 28.03][time: 60.59]
+[Epoch: 8/13][Iter: 550/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.52][loss_act: 6.72][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.25][losses: 28.94][time: 59.78]
+[Epoch: 8/13][Iter: 560/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.51][loss_act: 6.36][loss_rel: 3.81][loss_interact: 0.00][loss_box: 0.25][losses: 28.33][time: 61.27]
+[Epoch: 8/13][Iter: 570/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.50][loss_act: 6.49][loss_rel: 4.59][loss_interact: 0.00][loss_box: 0.26][losses: 30.33][time: 58.90]
+[Epoch: 8/13][Iter: 580/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.47][loss_act: 5.88][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 27.73][time: 61.88]
+[Epoch: 8/13][Iter: 590/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 6.51][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 29.22][time: 58.45]
+[Epoch: 8/13][Iter: 600/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.48][loss_act: 6.26][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 28.22][time: 63.84]
+[Epoch: 8/13][Iter: 610/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.54][loss_act: 6.01][loss_rel: 3.62][loss_interact: 0.00][loss_box: 0.26][losses: 27.43][time: 56.82]
+[Epoch: 8/13][Iter: 620/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.40][loss_act: 6.06][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.25][losses: 27.54][time: 65.45]
+[Epoch: 8/13][Iter: 630/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.45][loss_act: 6.64][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.24][losses: 29.06][time: 56.98]
+[Epoch: 8/13][Iter: 640/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.47][loss_act: 6.31][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 28.21][time: 66.61]
+[Epoch: 8/13][Iter: 650/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.51][loss_act: 6.59][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.26][losses: 28.54][time: 57.88]
+[Epoch: 8/13][Iter: 660/1713][lr: 0.000350][loss_conf: 2.37][loss_obj: 0.50][loss_act: 6.01][loss_rel: 4.36][loss_interact: 0.00][loss_box: 0.26][losses: 29.05][time: 64.07]
+[Epoch: 8/13][Iter: 670/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.43][loss_act: 6.19][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.24][losses: 28.21][time: 59.13]
+[Epoch: 8/13][Iter: 680/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.49][loss_act: 6.07][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 28.06][time: 63.72]
+[Epoch: 8/13][Iter: 690/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.42][loss_act: 6.75][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 29.28][time: 59.27]
+[Epoch: 8/13][Iter: 700/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.48][loss_act: 6.37][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.26][losses: 28.45][time: 63.33]
+[Epoch: 8/13][Iter: 710/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.52][loss_act: 5.89][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 27.61][time: 59.72]
+[Epoch: 8/13][Iter: 720/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.49][loss_act: 5.97][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.27][losses: 27.68][time: 64.83]
+[Epoch: 8/13][Iter: 730/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.48][loss_act: 6.42][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 29.04][time: 58.22]
+[Epoch: 8/13][Iter: 740/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.48][loss_act: 6.23][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 28.51][time: 65.91]
+[Epoch: 8/13][Iter: 750/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.47][loss_act: 6.17][loss_rel: 3.79][loss_interact: 0.00][loss_box: 0.25][losses: 27.88][time: 57.56]
+[Epoch: 8/13][Iter: 760/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.48][loss_act: 6.16][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.25][losses: 27.98][time: 65.92]
+[Epoch: 8/13][Iter: 770/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.47][loss_act: 6.30][loss_rel: 3.86][loss_interact: 0.00][loss_box: 0.26][losses: 28.29][time: 57.66]
+[Epoch: 8/13][Iter: 780/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.44][loss_act: 6.06][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.24][losses: 27.52][time: 66.20]
+[Epoch: 8/13][Iter: 790/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.49][loss_act: 6.75][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.26][losses: 29.41][time: 56.25]
+[Epoch: 8/13][Iter: 800/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.54][loss_act: 6.57][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 29.60][time: 66.15]
+[Epoch: 8/13][Iter: 810/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.49][loss_act: 6.24][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.25][losses: 28.20][time: 56.92]
+[Epoch: 8/13][Iter: 820/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.50][loss_act: 6.53][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.25][losses: 28.76][time: 66.11]
+[Epoch: 8/13][Iter: 830/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.47][loss_act: 5.89][loss_rel: 3.72][loss_interact: 0.00][loss_box: 0.26][losses: 27.44][time: 56.13]
+[Epoch: 8/13][Iter: 840/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.46][loss_act: 6.73][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.26][losses: 28.84][time: 65.37]
+[Epoch: 8/13][Iter: 850/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.48][loss_act: 6.74][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.25][losses: 28.96][time: 58.15]
+[Epoch: 8/13][Iter: 860/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.47][loss_act: 5.97][loss_rel: 3.97][loss_interact: 0.01][loss_box: 0.26][losses: 28.04][time: 63.60]
+[Epoch: 8/13][Iter: 870/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.48][loss_act: 6.61][loss_rel: 4.29][loss_interact: 0.00][loss_box: 0.25][losses: 29.77][time: 58.78]
+[Epoch: 8/13][Iter: 880/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.44][loss_act: 6.35][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.24][losses: 27.94][time: 63.82]
+[Epoch: 8/13][Iter: 890/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.44][loss_act: 6.01][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.25][losses: 27.79][time: 59.78]
+[Epoch: 8/13][Iter: 900/1713][lr: 0.000350][loss_conf: 2.34][loss_obj: 0.47][loss_act: 6.68][loss_rel: 4.29][loss_interact: 0.00][loss_box: 0.26][losses: 30.14][time: 61.75]
+[Epoch: 8/13][Iter: 910/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.47][loss_act: 5.84][loss_rel: 4.20][loss_interact: 0.00][loss_box: 0.26][losses: 28.05][time: 61.08]
+[Epoch: 8/13][Iter: 920/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.53][loss_act: 6.46][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.25][losses: 28.56][time: 61.33]
+[Epoch: 8/13][Iter: 930/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.51][loss_act: 6.56][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.25][losses: 29.12][time: 62.27]
+[Epoch: 8/13][Iter: 940/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.37][loss_act: 5.99][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.25][losses: 26.83][time: 60.68]
+[Epoch: 8/13][Iter: 950/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.43][loss_act: 5.97][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 28.04][time: 61.43]
+
+
+
+
+🧹 Cleaning up duplicate fixes and applying fresh ones...
+✅ Fixed optimizer.py
+✅ Fixed train.py (Cleaned all duplicate steps)
+\n======================================================================
+🚀 RUNNING: Resume at Epoch 8 | LR: 0.00035 | Milestones: 10 13 15
+======================================================================\n
+Setting Arguments.. :  Namespace(cuda=True, tfboard=False, save_folder='/content/yowo/weights', vis_data=False, eval=False, eval_epoch=1, save_dir='inference_results/', eval_first=False, batch_size=160, test_batch_size=16, accumulate=2, base_lr=0.00035, lr_decay_ratio=0.5, max_epoch=16, lr_epoch=[10, 13, 15], version='yowo_v2_x3d_m_yolo11m_multitask', resume='/content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_8.pth', conf_thresh=0.1, nms_thresh=0.5, topk=40, len_clip=16, freeze_backbone_2d=False, freeze_backbone_3d=False, memory=False, dataset='charades_ag', root='/content/yowo/data', num_workers=4, center_sampling_radius=2.5, topk_candicate=10, loss_conf_weight=1, loss_cls_weight=1, loss_reg_weight=5, focal_loss=False, distributed=False, dist_url='env://', world_size=1, sybn=False, amp=True)
+----------------------------------------------------------
+World size: 1
+use cuda
+==============================
+Dataset Config: CHARADES_AG 
+==============================
+Model Config: YOWO_V2_X3D_M_YOLO11M_MULTITASK 
+Loaded 274086 keyframes for train
+==============================
+Training model on: charades_ag
+The dataset size: 274086
+==============================
+Build YOWO_V2_X3D_M_YOLO11M_MULTITASK (Multi-Task) ...
+  Objects: 36
+  Actions: 157
+  Relations: 26
+==============================
+2D Backbone: YOLO11M
+--pretrained: True
+YOLO11 feature dimensions: [256, 512, 512]
+YOLO11 feature strides: [8, 16, 32]
+==============================
+3D Backbone: X3D_M
+--pretrained: True
+Loading X3D model: x3d_m (pretrained=True)
+Using cache found in /root/.cache/torch/hub/facebookresearch_pytorchvideo_main
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+Resuming from:  /content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_8.pth
+==============================
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.container.Sequential'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_upsample() for <class 'torch.nn.modules.upsampling.Upsample'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv3d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm3d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_softmax() for <class 'torch.nn.modules.activation.Softmax'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+/usr/local/lib/python3.12/dist-packages/torch/functional.py:505: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /pytorch/aten/src/ATen/native/TensorShape.cpp:4317.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+==============================
+FLOPs : 10.19 G
+Params : 24.86 M
+==============================
+Optimizer: adamw
+--momentum: 0.9
+--weight_decay: 0.0005
+keep training:  /content/yowo/weights/charades_ag/yowo_v2_x3d_m_yolo11m_multitask/yowo_v2_x3d_m_yolo11m_multitask_epoch_8.pth
+⚠️ No optimizer state found, starting fresh
+✅ Resuming from epoch 8
+Advancing LR scheduler by 8 steps...
+/usr/local/lib/python3.12/dist-packages/torch/optim/lr_scheduler.py:192: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn(
+Current Learning Rate: 0.000350
+==============================
+WarmUpScheduler: linear
+--base_lr: 0.00035
+--warmup_factor: 0.00066667
+--wp_iter: 500
+Using Automatic Mixed Precision (AMP) training
+/content/yowo/train.py:225: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler()
+/content/yowo/train.py:259: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/content/yowo/models/yowo/matcher.py:59: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+[Epoch: 9/16][Iter: 0/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.45][loss_act: 5.65][loss_rel: 4.03][loss_interact: 0.00][loss_box: 0.24][losses: 26.89][time: 61.96]
+[Epoch: 9/16][Iter: 10/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.41][loss_act: 5.66][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.27][losses: 27.11][time: 30.81]
+[Epoch: 9/16][Iter: 20/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.46][loss_act: 6.10][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 27.39][time: 54.05]
+[Epoch: 9/16][Iter: 30/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.50][loss_act: 6.03][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 28.47][time: 63.53]
+[Epoch: 9/16][Iter: 40/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.44][loss_act: 6.04][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.25][losses: 27.15][time: 54.31]
+[Epoch: 9/16][Iter: 50/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.44][loss_act: 5.89][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 27.43][time: 64.38]
+[Epoch: 9/16][Iter: 60/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.40][loss_act: 5.78][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.26][losses: 27.52][time: 53.70]
+[Epoch: 9/16][Iter: 70/1713][lr: 0.000350][loss_conf: 2.07][loss_obj: 0.51][loss_act: 5.63][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 26.77][time: 65.80]
+[Epoch: 9/16][Iter: 80/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.43][loss_act: 6.24][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.25][losses: 28.06][time: 54.38]
+[Epoch: 9/16][Iter: 90/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.49][loss_act: 6.11][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 27.93][time: 65.71]
+[Epoch: 9/16][Iter: 100/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.49][loss_act: 5.57][loss_rel: 4.00][loss_interact: 0.00][loss_box: 0.26][losses: 27.09][time: 53.69]
+[Epoch: 9/16][Iter: 110/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.49][loss_act: 6.21][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 28.36][time: 64.85]
+[Epoch: 9/16][Iter: 120/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.49][loss_act: 6.08][loss_rel: 4.26][loss_interact: 0.00][loss_box: 0.24][losses: 28.45][time: 55.68]
+[Epoch: 9/16][Iter: 130/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.49][loss_act: 6.05][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.26][losses: 28.43][time: 64.33]
+[Epoch: 9/16][Iter: 140/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.50][loss_act: 5.85][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 27.41][time: 55.45]
+[Epoch: 9/16][Iter: 150/1713][lr: 0.000350][loss_conf: 2.07][loss_obj: 0.42][loss_act: 5.66][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.25][losses: 26.51][time: 65.03]
+[Epoch: 9/16][Iter: 160/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.43][loss_act: 5.81][loss_rel: 3.59][loss_interact: 0.00][loss_box: 0.25][losses: 26.60][time: 54.59]
+[Epoch: 9/16][Iter: 170/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.42][loss_act: 5.51][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.25][losses: 26.11][time: 64.82]
+[Epoch: 9/16][Iter: 180/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.53][loss_act: 5.77][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.26][losses: 27.23][time: 55.95]
+[Epoch: 9/16][Iter: 190/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.54][loss_act: 6.01][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 28.56][time: 63.93]
+[Epoch: 9/16][Iter: 200/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.44][loss_act: 5.67][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.26][losses: 27.33][time: 56.29]
+[Epoch: 9/16][Iter: 210/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.45][loss_act: 5.86][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 27.12][time: 66.04]
+[Epoch: 9/16][Iter: 220/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.50][loss_act: 6.42][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 28.58][time: 54.47]
+[Epoch: 9/16][Iter: 230/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.45][loss_act: 6.32][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.25][losses: 28.89][time: 65.72]
+[Epoch: 9/16][Iter: 240/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.48][loss_act: 6.27][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 28.18][time: 56.38]
+[Epoch: 9/16][Iter: 250/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.43][loss_act: 5.41][loss_rel: 4.11][loss_interact: 0.00][loss_box: 0.26][losses: 26.77][time: 64.98]
+[Epoch: 9/16][Iter: 260/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.60][loss_rel: 4.16][loss_interact: 0.00][loss_box: 0.25][losses: 29.35][time: 57.15]
+[Epoch: 9/16][Iter: 270/1713][lr: 0.000350][loss_conf: 2.06][loss_obj: 0.47][loss_act: 5.95][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.25][losses: 27.11][time: 65.01]
+[Epoch: 9/16][Iter: 280/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.53][loss_act: 5.96][loss_rel: 3.78][loss_interact: 0.00][loss_box: 0.25][losses: 27.25][time: 56.48]
+[Epoch: 9/16][Iter: 290/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.05][loss_rel: 4.15][loss_interact: 0.00][loss_box: 0.26][losses: 28.34][time: 65.47]
+[Epoch: 9/16][Iter: 300/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.42][loss_act: 5.81][loss_rel: 3.73][loss_interact: 0.00][loss_box: 0.25][losses: 26.81][time: 57.75]
+[Epoch: 9/16][Iter: 310/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.43][loss_act: 5.81][loss_rel: 3.60][loss_interact: 0.00][loss_box: 0.26][losses: 26.74][time: 64.57]
+[Epoch: 9/16][Iter: 320/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.47][loss_act: 6.20][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.25][losses: 27.68][time: 56.17]
+[Epoch: 9/16][Iter: 330/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.43][loss_act: 5.75][loss_rel: 3.59][loss_interact: 0.00][loss_box: 0.26][losses: 26.37][time: 66.35]
+[Epoch: 9/16][Iter: 340/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.51][loss_act: 6.02][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 28.05][time: 55.32]
+[Epoch: 9/16][Iter: 350/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.46][loss_act: 5.95][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 27.58][time: 66.77]
+[Epoch: 9/16][Iter: 360/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.52][loss_act: 6.37][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 29.13][time: 55.26]
+[Epoch: 9/16][Iter: 370/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.45][loss_act: 5.65][loss_rel: 3.68][loss_interact: 0.00][loss_box: 0.25][losses: 26.54][time: 66.92]
+[Epoch: 9/16][Iter: 380/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.46][loss_act: 5.84][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.26][losses: 27.18][time: 55.84]
+[Epoch: 9/16][Iter: 390/1713][lr: 0.000350][loss_conf: 2.08][loss_obj: 0.37][loss_act: 5.49][loss_rel: 3.66][loss_interact: 0.00][loss_box: 0.25][losses: 25.66][time: 67.35]
+[Epoch: 9/16][Iter: 400/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.43][loss_act: 6.20][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.26][losses: 27.82][time: 56.10]
+[Epoch: 9/16][Iter: 410/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.48][loss_act: 6.46][loss_rel: 4.23][loss_interact: 0.00][loss_box: 0.25][losses: 29.26][time: 67.40]
+[Epoch: 9/16][Iter: 420/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.42][loss_act: 6.51][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.24][losses: 28.55][time: 55.06]
+[Epoch: 9/16][Iter: 430/1713][lr: 0.000350][loss_conf: 2.07][loss_obj: 0.46][loss_act: 5.77][loss_rel: 3.95][loss_interact: 0.00][loss_box: 0.24][losses: 26.95][time: 67.23]
+[Epoch: 9/16][Iter: 440/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.47][loss_act: 6.03][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 27.68][time: 56.00]
+[Epoch: 9/16][Iter: 450/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.51][loss_act: 5.63][loss_rel: 4.13][loss_interact: 0.00][loss_box: 0.26][losses: 27.55][time: 67.45]
+[Epoch: 9/16][Iter: 460/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.40][loss_act: 5.66][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.25][losses: 26.59][time: 56.43]
+[Epoch: 9/16][Iter: 470/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.44][loss_act: 5.76][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 26.82][time: 67.99]
+[Epoch: 9/16][Iter: 480/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.42][loss_act: 6.04][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.25][losses: 27.86][time: 55.62]
+[Epoch: 9/16][Iter: 490/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.42][loss_act: 6.06][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 27.52][time: 68.29]
+[Epoch: 9/16][Iter: 500/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.45][loss_act: 6.13][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.25][losses: 27.38][time: 55.21]
+[Epoch: 9/16][Iter: 510/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.40][loss_act: 6.37][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.25][losses: 28.74][time: 69.50]
+[Epoch: 9/16][Iter: 520/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.46][loss_act: 6.27][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.26][losses: 27.77][time: 55.17]
+[Epoch: 9/16][Iter: 530/1713][lr: 0.000350][loss_conf: 2.05][loss_obj: 0.46][loss_act: 6.06][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.25][losses: 27.03][time: 68.79]
+[Epoch: 9/16][Iter: 540/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.47][loss_act: 5.86][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 27.23][time: 72.87]
+[Epoch: 9/16][Iter: 550/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.34][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.25][losses: 28.31][time: 68.11]
+[Epoch: 9/16][Iter: 560/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.46][loss_act: 6.15][loss_rel: 3.74][loss_interact: 0.00][loss_box: 0.25][losses: 27.44][time: 54.12]
+[Epoch: 9/16][Iter: 570/1713][lr: 0.000350][loss_conf: 2.06][loss_obj: 0.43][loss_act: 5.66][loss_rel: 3.72][loss_interact: 0.00][loss_box: 0.25][losses: 26.21][time: 68.22]
+[Epoch: 9/16][Iter: 580/1713][lr: 0.000350][loss_conf: 2.33][loss_obj: 0.43][loss_act: 5.98][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.24][losses: 27.76][time: 55.40]
+[Epoch: 9/16][Iter: 590/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.55][loss_act: 6.38][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.25][losses: 28.34][time: 69.22]
+[Epoch: 9/16][Iter: 600/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.46][loss_act: 5.55][loss_rel: 3.81][loss_interact: 0.00][loss_box: 0.26][losses: 26.57][time: 54.81]
+[Epoch: 9/16][Iter: 610/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.44][loss_act: 5.90][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 27.63][time: 68.33]
+[Epoch: 9/16][Iter: 620/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.42][loss_act: 5.82][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 26.96][time: 55.18]
+[Epoch: 9/16][Iter: 630/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.51][loss_act: 5.70][loss_rel: 3.71][loss_interact: 0.00][loss_box: 0.25][losses: 26.64][time: 68.03]
+[Epoch: 9/16][Iter: 640/1713][lr: 0.000350][loss_conf: 2.29][loss_obj: 0.51][loss_act: 6.01][loss_rel: 4.21][loss_interact: 0.00][loss_box: 0.26][losses: 28.61][time: 55.17]
+[Epoch: 9/16][Iter: 650/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.47][loss_act: 5.49][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 26.57][time: 69.14]
+[Epoch: 9/16][Iter: 660/1713][lr: 0.000350][loss_conf: 2.26][loss_obj: 0.50][loss_act: 6.16][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.26][losses: 28.45][time: 55.66]
+[Epoch: 9/16][Iter: 670/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.47][loss_act: 6.02][loss_rel: 3.63][loss_interact: 0.00][loss_box: 0.25][losses: 27.08][time: 68.94]
+[Epoch: 9/16][Iter: 680/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.50][loss_act: 5.91][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.26][losses: 27.30][time: 55.23]
+[Epoch: 9/16][Iter: 690/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.35][loss_act: 5.59][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.25][losses: 26.44][time: 68.94]
+[Epoch: 9/16][Iter: 700/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.38][loss_act: 5.83][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.25][losses: 27.35][time: 54.81]
+[Epoch: 9/16][Iter: 710/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.43][loss_act: 5.63][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 26.56][time: 69.74]
+[Epoch: 9/16][Iter: 720/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.39][loss_act: 5.76][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 26.87][time: 54.31]
+[Epoch: 9/16][Iter: 730/1713][lr: 0.000350][loss_conf: 2.07][loss_obj: 0.49][loss_act: 5.88][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.25][losses: 26.82][time: 69.49]
+[Epoch: 9/16][Iter: 740/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.46][loss_act: 5.61][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.26][losses: 26.70][time: 55.18]
+[Epoch: 9/16][Iter: 750/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.42][loss_act: 5.85][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.25][losses: 27.22][time: 68.86]
+[Epoch: 9/16][Iter: 760/1713][lr: 0.000350][loss_conf: 2.36][loss_obj: 0.46][loss_act: 6.03][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.26][losses: 28.12][time: 55.39]
+[Epoch: 9/16][Iter: 770/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.47][loss_act: 5.57][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 26.64][time: 70.41]
+[Epoch: 9/16][Iter: 780/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.47][loss_act: 6.02][loss_rel: 3.98][loss_interact: 0.00][loss_box: 0.24][losses: 27.59][time: 55.45]
+[Epoch: 9/16][Iter: 790/1713][lr: 0.000350][loss_conf: 2.04][loss_obj: 0.45][loss_act: 6.62][loss_rel: 4.07][loss_interact: 0.00][loss_box: 0.25][losses: 28.88][time: 69.57]
+[Epoch: 9/16][Iter: 800/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.44][loss_act: 6.06][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 27.69][time: 54.86]
+[Epoch: 9/16][Iter: 810/1713][lr: 0.000350][loss_conf: 2.30][loss_obj: 0.46][loss_act: 5.63][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.26][losses: 27.52][time: 69.52]
+[Epoch: 9/16][Iter: 820/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.48][loss_act: 6.54][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 28.73][time: 55.65]
+[Epoch: 9/16][Iter: 830/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.48][loss_act: 5.90][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 27.94][time: 69.64]
+[Epoch: 9/16][Iter: 840/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.46][loss_act: 6.09][loss_rel: 3.59][loss_interact: 0.00][loss_box: 0.25][losses: 27.03][time: 54.80]
+[Epoch: 9/16][Iter: 850/1713][lr: 0.000350][loss_conf: 2.02][loss_obj: 0.41][loss_act: 5.62][loss_rel: 3.79][loss_interact: 0.00][loss_box: 0.24][losses: 26.11][time: 69.80]
+[Epoch: 9/16][Iter: 860/1713][lr: 0.000350][loss_conf: 2.28][loss_obj: 0.43][loss_act: 6.15][loss_rel: 4.33][loss_interact: 0.00][loss_box: 0.26][losses: 28.99][time: 55.36]
+[Epoch: 9/16][Iter: 870/1713][lr: 0.000350][loss_conf: 2.08][loss_obj: 0.42][loss_act: 6.01][loss_rel: 3.67][loss_interact: 0.00][loss_box: 0.25][losses: 26.88][time: 69.02]
+[Epoch: 9/16][Iter: 880/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 6.06][loss_rel: 3.76][loss_interact: 0.00][loss_box: 0.25][losses: 27.50][time: 55.43]
+[Epoch: 9/16][Iter: 890/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.49][loss_act: 6.19][loss_rel: 3.56][loss_interact: 0.00][loss_box: 0.24][losses: 27.10][time: 69.41]
+[Epoch: 9/16][Iter: 900/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.46][loss_act: 5.90][loss_rel: 3.67][loss_interact: 0.00][loss_box: 0.25][losses: 26.87][time: 55.22]
+[Epoch: 9/16][Iter: 910/1713][lr: 0.000350][loss_conf: 2.01][loss_obj: 0.49][loss_act: 5.51][loss_rel: 3.80][loss_interact: 0.00][loss_box: 0.24][losses: 26.06][time: 68.33]
+[Epoch: 9/16][Iter: 920/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.44][loss_act: 5.63][loss_rel: 3.83][loss_interact: 0.00][loss_box: 0.25][losses: 26.57][time: 56.62]
+[Epoch: 9/16][Iter: 930/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.49][loss_act: 6.24][loss_rel: 3.97][loss_interact: 0.00][loss_box: 0.26][losses: 28.47][time: 69.77]
+[Epoch: 9/16][Iter: 940/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.45][loss_act: 6.37][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.24][losses: 28.07][time: 55.51]
+[Epoch: 9/16][Iter: 950/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.52][loss_act: 5.66][loss_rel: 4.17][loss_interact: 0.00][loss_box: 0.25][losses: 27.57][time: 70.27]
+[Epoch: 9/16][Iter: 960/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.46][loss_act: 6.65][loss_rel: 4.19][loss_interact: 0.00][loss_box: 0.26][losses: 29.60][time: 56.41]
+[Epoch: 9/16][Iter: 970/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.46][loss_act: 6.04][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.26][losses: 27.87][time: 69.77]
+[Epoch: 9/16][Iter: 980/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.42][loss_act: 6.38][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.24][losses: 28.27][time: 55.65]
+[Epoch: 9/16][Iter: 990/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.45][loss_act: 6.05][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.25][losses: 27.41][time: 69.46]
+[Epoch: 9/16][Iter: 1000/1713][lr: 0.000350][loss_conf: 2.06][loss_obj: 0.43][loss_act: 6.06][loss_rel: 3.78][loss_interact: 0.00][loss_box: 0.25][losses: 27.14][time: 55.34]
+[Epoch: 9/16][Iter: 1010/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.49][loss_act: 5.47][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.26][losses: 26.49][time: 68.88]
+[Epoch: 9/16][Iter: 1020/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.39][loss_act: 6.10][loss_rel: 3.77][loss_interact: 0.00][loss_box: 0.25][losses: 27.54][time: 55.47]
+[Epoch: 9/16][Iter: 1030/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.43][loss_act: 5.57][loss_rel: 3.70][loss_interact: 0.00][loss_box: 0.26][losses: 26.28][time: 69.65]
+[Epoch: 9/16][Iter: 1040/1713][lr: 0.000350][loss_conf: 2.22][loss_obj: 0.47][loss_act: 6.48][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 28.67][time: 56.20]
+[Epoch: 9/16][Iter: 1050/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.49][loss_act: 6.03][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.25][losses: 27.49][time: 70.23]
+[Epoch: 9/16][Iter: 1060/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.46][loss_act: 5.56][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 26.52][time: 55.59]
+[Epoch: 9/16][Iter: 1070/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.52][loss_act: 6.28][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.25][losses: 28.42][time: 69.93]
+[Epoch: 9/16][Iter: 1080/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.42][loss_act: 5.67][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.24][losses: 26.60][time: 56.62]
+[Epoch: 9/16][Iter: 1090/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.45][loss_act: 5.85][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.25][losses: 27.39][time: 69.66]
+[Epoch: 9/16][Iter: 1100/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.43][loss_act: 6.03][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.24][losses: 27.25][time: 55.21]
+[Epoch: 9/16][Iter: 1110/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.43][loss_act: 5.95][loss_rel: 3.87][loss_interact: 0.00][loss_box: 0.26][losses: 27.46][time: 71.22]
+[Epoch: 9/16][Iter: 1120/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.46][loss_act: 6.50][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.26][losses: 28.95][time: 55.76]
+[Epoch: 9/16][Iter: 1130/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.51][loss_act: 5.69][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 26.78][time: 69.90]
+[Epoch: 9/16][Iter: 1140/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.45][loss_act: 5.56][loss_rel: 4.31][loss_interact: 0.00][loss_box: 0.25][losses: 27.58][time: 54.87]
+[Epoch: 9/16][Iter: 1150/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.45][loss_act: 5.97][loss_rel: 4.05][loss_interact: 0.00][loss_box: 0.25][losses: 27.76][time: 69.72]
+[Epoch: 9/16][Iter: 1160/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.55][loss_act: 5.54][loss_rel: 3.67][loss_interact: 0.00][loss_box: 0.26][losses: 26.35][time: 56.12]
+[Epoch: 9/16][Iter: 1170/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.40][loss_act: 5.93][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 27.17][time: 70.21]
+[Epoch: 9/16][Iter: 1180/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.43][loss_act: 6.01][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 27.28][time: 55.99]
+[Epoch: 9/16][Iter: 1190/1713][lr: 0.000350][loss_conf: 2.06][loss_obj: 0.44][loss_act: 5.79][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.24][losses: 26.83][time: 70.65]
+[Epoch: 9/16][Iter: 1200/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.46][loss_act: 5.47][loss_rel: 3.89][loss_interact: 0.00][loss_box: 0.24][losses: 26.47][time: 54.74]
+[Epoch: 9/16][Iter: 1210/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.41][loss_act: 5.46][loss_rel: 3.76][loss_interact: 0.00][loss_box: 0.25][losses: 26.13][time: 70.68]
+[Epoch: 9/16][Iter: 1220/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.48][loss_act: 5.81][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 26.90][time: 56.09]
+[Epoch: 9/16][Iter: 1230/1713][lr: 0.000350][loss_conf: 2.07][loss_obj: 0.43][loss_act: 6.12][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 27.39][time: 70.11]
+[Epoch: 9/16][Iter: 1240/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.44][loss_act: 5.55][loss_rel: 4.38][loss_interact: 0.00][loss_box: 0.25][losses: 27.47][time: 55.90]
+[Epoch: 9/16][Iter: 1250/1713][lr: 0.000350][loss_conf: 2.21][loss_obj: 0.42][loss_act: 5.82][loss_rel: 3.91][loss_interact: 0.00][loss_box: 0.24][losses: 27.15][time: 70.69]
+[Epoch: 9/16][Iter: 1260/1713][lr: 0.000350][loss_conf: 2.08][loss_obj: 0.37][loss_act: 5.54][loss_rel: 3.73][loss_interact: 0.00][loss_box: 0.23][losses: 25.74][time: 55.87]
+[Epoch: 9/16][Iter: 1270/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.48][loss_act: 5.82][loss_rel: 4.08][loss_interact: 0.00][loss_box: 0.26][losses: 27.65][time: 71.02]
+[Epoch: 9/16][Iter: 1280/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.40][loss_act: 5.39][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 26.21][time: 55.60]
+[Epoch: 9/16][Iter: 1290/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.45][loss_act: 6.23][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.25][losses: 28.07][time: 70.05]
+[Epoch: 9/16][Iter: 1300/1713][lr: 0.000350][loss_conf: 2.05][loss_obj: 0.44][loss_act: 5.46][loss_rel: 3.82][loss_interact: 0.00][loss_box: 0.24][losses: 25.92][time: 55.68]
+[Epoch: 9/16][Iter: 1310/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.45][loss_act: 5.80][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.26][losses: 27.23][time: 71.07]
+[Epoch: 9/16][Iter: 1320/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.43][loss_act: 5.48][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 26.88][time: 55.86]
+[Epoch: 9/16][Iter: 1330/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.52][loss_act: 5.74][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.26][losses: 27.65][time: 71.67]
+[Epoch: 9/16][Iter: 1340/1713][lr: 0.000350][loss_conf: 2.04][loss_obj: 0.43][loss_act: 5.95][loss_rel: 3.78][loss_interact: 0.00][loss_box: 0.24][losses: 26.80][time: 56.36]
+[Epoch: 9/16][Iter: 1350/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.42][loss_act: 6.04][loss_rel: 3.96][loss_interact: 0.00][loss_box: 0.26][losses: 27.59][time: 70.38]
+[Epoch: 9/16][Iter: 1360/1713][lr: 0.000350][loss_conf: 2.27][loss_obj: 0.48][loss_act: 6.06][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 27.95][time: 55.77]
+[Epoch: 9/16][Iter: 1370/1713][lr: 0.000350][loss_conf: 2.08][loss_obj: 0.52][loss_act: 5.96][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.25][losses: 27.55][time: 70.72]
+[Epoch: 9/16][Iter: 1380/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.46][loss_act: 5.75][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 27.16][time: 56.37]
+[Epoch: 9/16][Iter: 1390/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.43][loss_act: 5.16][loss_rel: 3.69][loss_interact: 0.00][loss_box: 0.25][losses: 25.35][time: 70.01]
+[Epoch: 9/16][Iter: 1400/1713][lr: 0.000350][loss_conf: 2.25][loss_obj: 0.50][loss_act: 5.78][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.26][losses: 27.45][time: 55.76]
+[Epoch: 9/16][Iter: 1410/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.42][loss_act: 5.80][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 27.32][time: 71.02]
+[Epoch: 9/16][Iter: 1420/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.47][loss_act: 6.10][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.24][losses: 27.32][time: 56.39]
+[Epoch: 9/16][Iter: 1430/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.40][loss_act: 5.60][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 26.70][time: 70.66]
+[Epoch: 9/16][Iter: 1440/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.46][loss_act: 5.84][loss_rel: 4.10][loss_interact: 0.00][loss_box: 0.25][losses: 27.59][time: 55.60]
+[Epoch: 9/16][Iter: 1450/1713][lr: 0.000350][loss_conf: 2.12][loss_obj: 0.43][loss_act: 5.46][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.24][losses: 26.17][time: 69.93]
+[Epoch: 9/16][Iter: 1460/1713][lr: 0.000350][loss_conf: 2.23][loss_obj: 0.42][loss_act: 5.93][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.25][losses: 27.47][time: 56.30]
+[Epoch: 9/16][Iter: 1470/1713][lr: 0.000350][loss_conf: 2.32][loss_obj: 0.43][loss_act: 5.93][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 28.03][time: 71.06]
+[Epoch: 9/16][Iter: 1480/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.45][loss_act: 5.69][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 27.19][time: 55.48]
+[Epoch: 9/16][Iter: 1490/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.45][loss_act: 6.28][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 27.71][time: 70.40]
+[Epoch: 9/16][Iter: 1500/1713][lr: 0.000350][loss_conf: 2.14][loss_obj: 0.43][loss_act: 5.85][loss_rel: 4.06][loss_interact: 0.00][loss_box: 0.25][losses: 27.45][time: 56.11]
+[Epoch: 9/16][Iter: 1510/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.47][loss_act: 5.96][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 27.59][time: 70.74]
+[Epoch: 9/16][Iter: 1520/1713][lr: 0.000350][loss_conf: 2.16][loss_obj: 0.45][loss_act: 6.27][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 28.30][time: 55.47]
+[Epoch: 9/16][Iter: 1530/1713][lr: 0.000350][loss_conf: 2.08][loss_obj: 0.46][loss_act: 5.65][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 27.06][time: 70.89]
+[Epoch: 9/16][Iter: 1540/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.48][loss_act: 5.45][loss_rel: 3.75][loss_interact: 0.00][loss_box: 0.25][losses: 26.08][time: 55.68]
+[Epoch: 9/16][Iter: 1550/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.40][loss_act: 5.80][loss_rel: 4.04][loss_interact: 0.00][loss_box: 0.25][losses: 27.25][time: 70.37]
+[Epoch: 9/16][Iter: 1560/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.49][loss_act: 5.89][loss_rel: 3.99][loss_interact: 0.00][loss_box: 0.25][losses: 27.65][time: 56.02]
+[Epoch: 9/16][Iter: 1570/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.44][loss_act: 6.16][loss_rel: 4.18][loss_interact: 0.00][loss_box: 0.26][losses: 28.44][time: 69.66]
+[Epoch: 9/16][Iter: 1580/1713][lr: 0.000350][loss_conf: 2.05][loss_obj: 0.43][loss_act: 5.85][loss_rel: 3.51][loss_interact: 0.00][loss_box: 0.25][losses: 26.14][time: 55.41]
+[Epoch: 9/16][Iter: 1590/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.43][loss_act: 5.74][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 27.00][time: 71.50]
+[Epoch: 9/16][Iter: 1600/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.39][loss_act: 5.38][loss_rel: 3.68][loss_interact: 0.00][loss_box: 0.24][losses: 25.47][time: 55.53]
+[Epoch: 9/16][Iter: 1610/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.41][loss_act: 6.09][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.24][losses: 27.36][time: 71.86]
+[Epoch: 9/16][Iter: 1620/1713][lr: 0.000350][loss_conf: 2.09][loss_obj: 0.45][loss_act: 5.72][loss_rel: 3.88][loss_interact: 0.00][loss_box: 0.25][losses: 26.76][time: 55.88]
+[Epoch: 9/16][Iter: 1630/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.42][loss_act: 5.86][loss_rel: 3.92][loss_interact: 0.00][loss_box: 0.25][losses: 27.31][time: 69.94]
+[Epoch: 9/16][Iter: 1640/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.44][loss_act: 5.88][loss_rel: 4.09][loss_interact: 0.00][loss_box: 0.25][losses: 27.63][time: 55.79]
+[Epoch: 9/16][Iter: 1650/1713][lr: 0.000350][loss_conf: 2.10][loss_obj: 0.49][loss_act: 6.35][loss_rel: 3.94][loss_interact: 0.00][loss_box: 0.26][losses: 28.40][time: 70.97]
+[Epoch: 9/16][Iter: 1660/1713][lr: 0.000350][loss_conf: 2.13][loss_obj: 0.39][loss_act: 5.68][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.24][losses: 26.50][time: 56.54]
+[Epoch: 9/16][Iter: 1670/1713][lr: 0.000350][loss_conf: 2.24][loss_obj: 0.47][loss_act: 5.91][loss_rel: 3.93][loss_interact: 0.00][loss_box: 0.25][losses: 27.56][time: 70.17]
+[Epoch: 9/16][Iter: 1680/1713][lr: 0.000350][loss_conf: 2.11][loss_obj: 0.39][loss_act: 5.39][loss_rel: 3.71][loss_interact: 0.00][loss_box: 0.25][losses: 25.69][time: 55.72]
+[Epoch: 9/16][Iter: 1690/1713][lr: 0.000350][loss_conf: 2.05][loss_obj: 0.44][loss_act: 5.41][loss_rel: 3.50][loss_interact: 0.00][loss_box: 0.26][losses: 25.36][time: 70.77]
+[Epoch: 9/16][Iter: 1700/1713][lr: 0.000350][loss_conf: 2.19][loss_obj: 0.47][loss_act: 5.79][loss_rel: 3.90][loss_interact: 0.00][loss_box: 0.26][losses: 27.28][time: 55.89]
+[Epoch: 9/16][Iter: 1710/1713][lr: 0.000350][loss_conf: 2.17][loss_obj: 0.41][loss_act: 5.38][loss_rel: 3.85][loss_interact: 0.00][loss_box: 0.25][losses: 26.15][time: 69.24]
+No evaluator ... save model and go on training.
+Saving state, epoch: 9
+[Epoch: 10/16][Iter: 0/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.48][loss_act: 5.75][loss_rel: 3.84][loss_interact: 0.00][loss_box: 0.24][losses: 26.98][time: 34.78]
+[Epoch: 10/16][Iter: 10/1713][lr: 0.000350][loss_conf: 2.18][loss_obj: 0.52][loss_act: 5.41][loss_rel: 3.73][loss_interact: 0.00][loss_box: 0.25][losses: 26.19][time: 52.66]
+[Epoch: 10/16][Iter: 20/1713][lr: 0.000350][loss_conf: 2.20][loss_obj: 0.36][loss_act: 5.15][loss_rel: 3.71][loss_interact: 0.00][loss_box: 0.25][losses: 25.33][time: 68.74]
+[Epoch: 10/16][Iter: 30/1713][lr: 0.000350][loss_conf: 2.15][loss_obj: 0.42][loss_act: 5.62][loss_rel: 3.56][loss_interact: 0.00][loss_box: 0.25][losses: 25.98][time: 50.17]
+[Epoch: 10/16][Iter: 40/1713][lr: 0.000350][loss_conf: 2.02][loss_obj: 0.41][loss_act: 5.43][loss_rel: 3.67][loss_interact: 0.00][loss_box: 0.24][losses: 25.50][time: 67.17]

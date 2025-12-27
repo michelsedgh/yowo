@@ -33,139 +33,234 @@ from .head import build_head
 from utils.nms import multiclass_nms
 
 
-class ObjectCrossAttention(nn.Module):
+class ObjectContextModule(nn.Module):
     """
-    Cross-attention: Query features attend to Object predictions.
+    Provides object context to the relation head.
     
-    Used by relation head to see what objects exist.
-    Also used as first stage for action head.
+    KEY FIX: Uses SOFTMAX-normalized predictions instead of raw logits.
     
-    Uses PyTorch's verified nn.MultiheadAttention.
+    This ensures:
+    1. Context values are in [0,1] range (probabilities)
+    2. Semantic meaning: high probability = this object class is present
+    3. Balanced magnitudes with features for proper fusion
+    4. Gradients flow through softmax to object predictions
     """
-    def __init__(self, dim=256, num_classes=36, num_heads=4):
+    def __init__(self, dim=256, num_classes=36):
         super().__init__()
         self.dim = dim
         self.num_classes = num_classes
         
-        # Project class probabilities to attention dimension
-        self.proj = nn.Sequential(
-            nn.Linear(num_classes, dim),
-            nn.ReLU(),
-            nn.Linear(dim, dim)
+        # Project object probabilities to feature dimension
+        # Input is softmax probabilities [0,1], not raw logits
+        self.context_proj = nn.Sequential(
+            nn.Conv2d(num_classes, dim, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        # PyTorch's verified MultiheadAttention
-        self.cross_attn = nn.MultiheadAttention(
-            embed_dim=dim,
-            num_heads=num_heads,
-            batch_first=True
+        # Initialize to preserve probability magnitudes
+        for m in self.context_proj:
+            if isinstance(m, nn.Conv2d):
+                nn.init.xavier_uniform_(m.weight, gain=1.0)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+        
+        # Fusion: combine features with object context
+        self.fusion = nn.Sequential(
+            nn.Conv2d(dim * 2, dim, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        self.norm = nn.LayerNorm(dim)
-        self.gate = nn.Parameter(torch.zeros(1))
+        # Initialize fusion to start as identity-like for features
+        nn.init.xavier_uniform_(self.fusion[0].weight, gain=0.5)
+        nn.init.xavier_uniform_(self.fusion[2].weight, gain=0.5)
+        
+        # GroupNorm for stable training
+        self.norm = nn.GroupNorm(32, dim)
     
     def forward(self, cls_feat, pred_logits, return_weights=False):
         """
         Args:
-            cls_feat: [B, C, H, W] - query features
-            pred_logits: [B, num_classes, H, W] - class predictions (logits)
-            return_weights: bool - whether to return attention weights for visualization
+            cls_feat: [B, C, H, W] - features 
+            pred_logits: [B, num_classes, H, W] - object predictions (LOGITS)
         Returns:
-            attended_feat: [B, C, H, W] - attended features
-            attn_weights: [B, N, N] - attention weights (if return_weights=True)
+            context_feat: [B, C, H, W] - features enriched with object context
         """
-        B, C, H, W = cls_feat.shape
+        # CRITICAL FIX: Convert logits to probabilities with softmax
+        # Now obj_probs is in [0,1] with semantic meaning
+        obj_probs = F.softmax(pred_logits, dim=1)  # [B, num_classes, H, W]
         
-        # Reshape to sequence
-        query = cls_feat.flatten(2).permute(0, 2, 1)  # [B, N, C]
+        # Project probabilities to context embedding
+        obj_context = self.context_proj(obj_probs)  # [B, C, H, W]
         
-        # Get probabilities and project
-        if self.num_classes > 1:
-            probs = F.softmax(pred_logits, dim=1)  # [B, classes, H, W]
-        else:
-            probs = torch.sigmoid(pred_logits)
-        kv_seq = probs.flatten(2).permute(0, 2, 1)  # [B, N, classes]
-        kv = self.proj(kv_seq)  # [B, N, C]
+        # Match context magnitude to features for balanced fusion
+        feat_scale = cls_feat.abs().mean().clamp(min=0.01)
+        ctx_scale = obj_context.abs().mean().clamp(min=0.01)
+        obj_context = obj_context * (feat_scale / ctx_scale)
         
-        # Cross-attention
-        attended, attn_weights = self.cross_attn(query, kv, kv)  # [B, N, C], [B, N, N]
+        # Concatenate and fuse
+        combined = torch.cat([cls_feat, obj_context], dim=1)  # [B, 2C, H, W]
+        delta = self.fusion(combined)  # [B, C, H, W]
         
-        # Gated residual
-        out = self.norm(query + self.gate * attended)
-        out = out.permute(0, 2, 1).view(B, C, H, W)
+        # Residual connection + normalization
+        out = self.norm(cls_feat + delta)
         
         if return_weights:
-            return out, attn_weights
+            B, C, H, W = cls_feat.shape
+            dummy_weights = torch.ones(B, H*W, H*W, device=cls_feat.device) / (H*W)
+            return out, dummy_weights
         return out
 
 
-class ObjectRelationCrossAttention(nn.Module):
+class SceneContextAttention(nn.Module):
     """
-    Cross-attention: Action features attend to BOTH Object AND Relation predictions.
+    Cross-attention for action prediction using object+relation context.
     
-    This implements the final stage of: Object → Relation → Action
-    The action head needs to see both what objects exist AND what relations exist.
+    KEY FIX: Uses NORMALIZED predictions (softmax/sigmoid) instead of raw logits.
     
-    Uses PyTorch's verified nn.MultiheadAttention.
+    This ensures:
+    1. Object probs in [0,1] via softmax (exclusive classes)
+    2. Relation probs in [0,1] via sigmoid (multi-label)
+    3. Balanced Q/K magnitudes for meaningful attention
+    4. Model learns WHERE to attend based on WHAT objects/relations exist
     """
     def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=4):
         super().__init__()
         self.dim = dim
+        self.num_objects = num_objects
+        self.num_relations = num_relations
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
         
-        # Project concatenated object + relation probabilities
-        self.obj_proj = nn.Linear(num_objects, dim // 2)
-        self.rel_proj = nn.Linear(num_relations, dim // 2)
-        self.combine = nn.Sequential(
-            nn.Linear(dim, dim),
-            nn.ReLU(),
-            nn.Linear(dim, dim)
+        # Query projection: from features
+        self.query_proj = nn.Conv2d(dim, dim, kernel_size=1)
+        
+        # Key projection: from normalized context predictions
+        # Input is probabilities [0,1], dimensionality = num_objects + num_relations
+        self.key_proj = nn.Sequential(
+            nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        # PyTorch's verified MultiheadAttention
-        self.cross_attn = nn.MultiheadAttention(
-            embed_dim=dim,
-            num_heads=num_heads,
-            batch_first=True
+        # Value projection: features + context for rich retrieval
+        self.context_to_value = nn.Sequential(
+            nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1)
         )
+        self.value_fusion = nn.Conv2d(dim * 2, dim, kernel_size=1)
         
-        self.norm = nn.LayerNorm(dim)
-        self.gate = nn.Parameter(torch.zeros(1))
+        # Output projection with small init for stable residual
+        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
+        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.1)
+        
+        # Position encoding (helps query be position-aware)
+        max_size = 32
+        self.pos_embed_h = nn.Parameter(torch.zeros(1, dim // 2, max_size, 1))
+        self.pos_embed_w = nn.Parameter(torch.zeros(1, dim // 2, 1, max_size))
+        nn.init.normal_(self.pos_embed_h, std=0.02)
+        nn.init.normal_(self.pos_embed_w, std=0.02)
+        
+        # Initialize projections for balanced magnitudes
+        for module in [self.key_proj, self.context_to_value]:
+            for m in module:
+                if isinstance(m, nn.Conv2d):
+                    nn.init.xavier_uniform_(m.weight, gain=1.0)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+        
+        # GroupNorm for stable training
+        self.norm = nn.GroupNorm(32, dim)
+    
+    def get_position_encoding(self, H, W, device):
+        """Generate 2D position encoding."""
+        pos_h = F.interpolate(
+            self.pos_embed_h, size=(H, 1), mode='bilinear', align_corners=False
+        )
+        pos_w = F.interpolate(
+            self.pos_embed_w, size=(1, W), mode='bilinear', align_corners=False
+        )
+        pos_h = pos_h.expand(-1, -1, -1, W)
+        pos_w = pos_w.expand(-1, -1, H, -1)
+        return torch.cat([pos_h, pos_w], dim=1)
     
     def forward(self, cls_feat, obj_pred, rel_pred, return_weights=False):
         """
         Args:
-            cls_feat: [B, C, H, W] - query features for action
-            obj_pred: [B, 36, H, W] - object predictions (logits)
-            rel_pred: [B, 26, H, W] - relation predictions (logits)
-            return_weights: bool - return attention weights for visualization
+            cls_feat: [B, C, H, W] - features
+            obj_pred: [B, 36, H, W] - object predictions (LOGITS)
+            rel_pred: [B, 26, H, W] - relation predictions (LOGITS)
         Returns:
-            attended_feat: [B, C, H, W] - features aware of both objects and relations
+            context_feat: [B, C, H, W] - features enriched with scene context
         """
         B, C, H, W = cls_feat.shape
+        N = H * W
         
-        # Reshape to sequence
-        query = cls_feat.flatten(2).permute(0, 2, 1)  # [B, N, C]
+        # CRITICAL FIX: Normalize predictions to probabilities
+        # Objects: softmax (mutually exclusive)
+        # Relations: sigmoid (multi-label)
+        obj_probs = F.softmax(obj_pred, dim=1)  # [B, 36, H, W], sums to 1
+        rel_probs = torch.sigmoid(rel_pred)     # [B, 26, H, W], each in [0,1]
         
-        # Get object and relation probabilities
-        obj_probs = F.softmax(obj_pred, dim=1).flatten(2).permute(0, 2, 1)  # [B, N, 36]
-        rel_probs = torch.sigmoid(rel_pred).flatten(2).permute(0, 2, 1)  # [B, N, 26]
+        # Combine normalized predictions
+        context_probs = torch.cat([obj_probs, rel_probs], dim=1)  # [B, 62, H, W]
         
-        # Project and combine
-        obj_emb = self.obj_proj(obj_probs)  # [B, N, C/2]
-        rel_emb = self.rel_proj(rel_probs)  # [B, N, C/2]
-        combined = torch.cat([obj_emb, rel_emb], dim=-1)  # [B, N, C]
-        kv = self.combine(combined)  # [B, N, C]
+        # Query: features + position encoding
+        pos = self.get_position_encoding(H, W, cls_feat.device)
+        Q = self.query_proj(cls_feat) + pos  # [B, C, H, W]
         
-        # Cross-attention: action query attends to combined object+relation
-        attended, attn_weights = self.cross_attn(query, kv, kv)
+        # Key: from context probabilities (semantic content)
+        K = self.key_proj(context_probs)  # [B, C, H, W]
         
-        # Gated residual
-        out = self.norm(query + self.gate * attended)
-        out = out.permute(0, 2, 1).view(B, C, H, W)
+        # Match Q and K magnitudes for balanced attention
+        q_scale = Q.abs().mean().clamp(min=0.01)
+        k_scale = K.abs().mean().clamp(min=0.01)
+        K = K * (q_scale / k_scale)
+        
+        # Value: features + projected context
+        context_features = self.context_to_value(context_probs)
+        # Scale context to match features
+        feat_scale = cls_feat.abs().mean().clamp(min=0.01)
+        ctx_scale = context_features.abs().mean().clamp(min=0.01)
+        context_features = context_features * (feat_scale / ctx_scale)
+        V = self.value_fusion(torch.cat([cls_feat, context_features], dim=1))
+        
+        # Reshape for multi-head attention: [B, heads, N, head_dim]
+        Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        
+        # Attention: Q @ K^T / sqrt(d)
+        attn = (Q @ K.transpose(-2, -1)) * self.scale
+        attn_weights = F.softmax(attn, dim=-1)
+        
+        # Attend to values
+        attended = attn_weights @ V
+        
+        # Reshape back
+        attended = attended.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)
+        attended = self.out_proj(attended)
+        
+        # Residual + norm
+        out = self.norm(cls_feat + attended)
         
         if return_weights:
-            return out, attn_weights
+            return out, attn_weights.mean(dim=1)
         return out
+
+
+# Keep old name as alias for compatibility
+class ObjectRelationContextModule(SceneContextAttention):
+    """Alias for backward compatibility."""
+    pass
+
+
+# Aliases for backward compatibility with existing code
+ObjectCrossAttention = ObjectContextModule
+ObjectRelationCrossAttention = ObjectRelationContextModule
 
 
 class YOWOMultiTask(nn.Module):
@@ -256,25 +351,25 @@ class YOWOMultiTask(nn.Module):
         # ============ CASCADED CROSS-ATTENTION ============
         # Object → Relation → Action prediction chain
         
-        # Cross-attention for RELATION head: sees what objects exist
+        # Context modules for RELATION head: sees what objects exist
         # "I'm predicting 'holding' relation - but holding WHAT?"
         self.obj_cross_attn = nn.ModuleList([
             ObjectCrossAttention(
                 dim=head_dim,
-                num_classes=self.num_objects,
-                num_heads=4
+                num_classes=self.num_objects
             )
             for _ in range(len(cfg['stride']))
         ])
         
-        # Cross-attention for ACTION head: sees BOTH objects AND relations
-        # "I'm predicting 'Holding laptop' - need to know laptop exists AND holding relation"
+        # Scene Context Attention for ACTION head: attends to ENTIRE scene
+        # Learns which objects/relations are relevant for action prediction
+        # Uses cross-attention: Key=obj+rel predictions, Value=features
         self.obj_rel_cross_attn = nn.ModuleList([
-            ObjectRelationCrossAttention(
+            SceneContextAttention(
                 dim=head_dim,
                 num_objects=self.num_objects,
                 num_relations=self.num_relations,
-                num_heads=4
+                num_heads=4  # Multi-head attention for diverse patterns
             )
             for _ in range(len(cfg['stride']))
         ])

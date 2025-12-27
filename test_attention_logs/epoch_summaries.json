@@ -1,0 +1,16 @@
+[
+  {
+    "epoch": 0,
+    "num_batches_logged": 1,
+    "pos_scale_mean_mean": 0.5,
+    "pos_scale_mean_std": 0.0,
+    "entropy_normalized_mean": 0.9928035097063116,
+    "entropy_normalized_std": 0.0,
+    "nearby_far_ratio_mean": 0.2662617866560954,
+    "nearby_far_ratio_std": 0.0,
+    "level1_entropy_normalized_mean": 0.9951417768993727,
+    "level1_entropy_normalized_std": 0.0,
+    "level1_nearby_far_ratio_mean": 0.10494851775519927,
+    "level1_nearby_far_ratio_std": 0.0
+  }
+]

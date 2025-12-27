@@ -1,0 +1,50 @@
+[0;93m2025-12-24 05:18:00.085701276 [W:onnxruntime:Default, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+Using cache found in /home/michel/.cache/torch/hub/facebookresearch_pytorchvideo_main
+Using CUDA
+==============================
+Dataset Config: CHARADES_AG 
+==============================
+Model Config: YOWO_V2_X3D_M_YOLO11M_MULTITASK 
+
+============================================================
+Charades-AG Evaluation
+============================================================
+Model: yowo_v2_x3d_m_yolo11m_multitask
+Weight: yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth
+Device: cuda
+Classes: 36 objects, 157 actions, 26 relations
+============================================================
+
+==============================
+Build YOWO_V2_X3D_M_YOLO11M_MULTITASK (Multi-Task) ...
+  Objects: 36
+  Actions: 157
+  Relations: 26
+==============================
+2D Backbone: YOLO11M
+--pretrained: False
+YOLO11 feature dimensions: [256, 512, 512]
+YOLO11 feature strides: [8, 16, 32]
+==============================
+3D Backbone: X3D_M
+--pretrained: False
+Loading X3D model: x3d_m (pretrained=False)
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+==============================
+Head: Decoupled Head
+Finished loading model!
+Loaded weights from: yowo_v2_x3d_m_yolo11m_multitask_epoch_5.pth
+Loaded 14696 keyframes for val
+Charades-AG Evaluator initialized:
+  Test keyframes: 14696
+  Objects: 36, Actions: 157, Relations: 26
+
+============================================================
+Charades-AG Evaluation - Epoch 5
+============================================================
+Evaluating 14696 keyframes...
+/home/michel/miniconda3/envs/yowov2/lib/python3.10/site-packages/torch/functional.py:512: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at /opt/pytorch/aten/src/ATen/native/TensorShape.cpp:3587.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
