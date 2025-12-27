@@ -113,79 +113,67 @@ class ObjectContextModule(nn.Module):
         return out
 
 
-class SceneContextAttention(nn.Module):
+class GlobalSceneContext(nn.Module):
     """
-    Cross-attention for action prediction using object+relation context.
+    Global Scene Context for action prediction using object+relation information.
     
-    KEY FIX: Uses NORMALIZED predictions (softmax/sigmoid) instead of raw logits.
+    KEY INSIGHT: Actions depend on GLOBAL scene understanding, not local attention.
     
-    This ensures:
-    1. Object probs in [0,1] via softmax (exclusive classes)
-    2. Relation probs in [0,1] via sigmoid (multi-label)
-    3. Balanced Q/K magnitudes for meaningful attention
-    4. Model learns WHERE to attend based on WHAT objects/relations exist
+    This module:
+    1. Pools object predictions globally (max-pool) to get scene-level context
+       - "Is there a laptop ANYWHERE in the scene?" -> Yes/No confidence
+    2. Pools relation predictions globally 
+       - "Is there a 'holding' relation ANYWHERE?" -> Yes/No confidence  
+    3. Projects this global context to feature dimension
+    4. Broadcasts to all positions and fuses with local features
+    
+    This way, the action prediction at EVERY position knows:
+    - All objects present in the scene
+    - All relations happening in the scene
+    - And can predict actions accordingly
+    
+    Example: Person, laptop, couch detected + sitting_on, holding relations
+    -> Action head knows: "typing on laptop", "sitting on couch" are likely
     """
     def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=4):
         super().__init__()
         self.dim = dim
         self.num_objects = num_objects
         self.num_relations = num_relations
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        # num_heads kept for API compatibility but not used
         
-        # Query projection: from features
-        self.query_proj = nn.Conv2d(dim, dim, kernel_size=1)
+        # Project global context (obj + rel) to feature dimension
+        # Using a small MLP to learn the mapping
+        self.context_proj = nn.Sequential(
+            nn.Linear(num_objects + num_relations, dim),
+            nn.GELU(),
+            nn.Linear(dim, dim)
+        )
         
-        # Key projection: from normalized context predictions
-        # Input is probabilities [0,1], dimensionality = num_objects + num_relations
-        self.key_proj = nn.Sequential(
-            nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
+        # Initialize with standard weights - let the model learn the right magnitude
+        for m in self.context_proj:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight, gain=1.0)  # Standard gain, not reduced
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+        
+        # Fusion: combine local features with global context
+        self.fusion = nn.Sequential(
+            nn.Conv2d(dim * 2, dim, kernel_size=1),
             nn.GELU(),
             nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        # Value projection: features + context for rich retrieval
-        self.context_to_value = nn.Sequential(
-            nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
-            nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1)
-        )
-        self.value_fusion = nn.Conv2d(dim * 2, dim, kernel_size=1)
+        # Initialize fusion with standard weights
+        nn.init.xavier_uniform_(self.fusion[0].weight, gain=1.0)
+        nn.init.xavier_uniform_(self.fusion[2].weight, gain=1.0)
         
-        # Output projection with small init for stable residual
-        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
-        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.1)
-        
-        # Position encoding (helps query be position-aware)
-        max_size = 32
-        self.pos_embed_h = nn.Parameter(torch.zeros(1, dim // 2, max_size, 1))
-        self.pos_embed_w = nn.Parameter(torch.zeros(1, dim // 2, 1, max_size))
-        nn.init.normal_(self.pos_embed_h, std=0.02)
-        nn.init.normal_(self.pos_embed_w, std=0.02)
-        
-        # Initialize projections for balanced magnitudes
-        for module in [self.key_proj, self.context_to_value]:
-            for m in module:
-                if isinstance(m, nn.Conv2d):
-                    nn.init.xavier_uniform_(m.weight, gain=1.0)
-                    if m.bias is not None:
-                        nn.init.zeros_(m.bias)
+        # Learnable scale for context contribution
+        # Starts at 1.0, model can learn to adjust
+        self.context_scale = nn.Parameter(torch.tensor(1.0))
         
         # GroupNorm for stable training
         self.norm = nn.GroupNorm(32, dim)
-    
-    def get_position_encoding(self, H, W, device):
-        """Generate 2D position encoding."""
-        pos_h = F.interpolate(
-            self.pos_embed_h, size=(H, 1), mode='bilinear', align_corners=False
-        )
-        pos_w = F.interpolate(
-            self.pos_embed_w, size=(1, W), mode='bilinear', align_corners=False
-        )
-        pos_h = pos_h.expand(-1, -1, -1, W)
-        pos_w = pos_w.expand(-1, -1, H, -1)
-        return torch.cat([pos_h, pos_w], dim=1)
     
     def forward(self, cls_feat, obj_pred, rel_pred, return_weights=False):
         """
@@ -194,62 +182,58 @@ class SceneContextAttention(nn.Module):
             obj_pred: [B, 36, H, W] - object predictions (LOGITS)
             rel_pred: [B, 26, H, W] - relation predictions (LOGITS)
         Returns:
-            context_feat: [B, C, H, W] - features enriched with scene context
+            context_feat: [B, C, H, W] - features enriched with global scene context
         """
         B, C, H, W = cls_feat.shape
-        N = H * W
         
-        # CRITICAL FIX: Normalize predictions to probabilities
-        # Objects: softmax (mutually exclusive)
-        # Relations: sigmoid (multi-label)
-        obj_probs = F.softmax(obj_pred, dim=1)  # [B, 36, H, W], sums to 1
-        rel_probs = torch.sigmoid(rel_pred)     # [B, 26, H, W], each in [0,1]
+        # Normalize predictions to probabilities
+        obj_probs = F.softmax(obj_pred, dim=1)  # [B, 36, H, W]
+        rel_probs = torch.sigmoid(rel_pred)     # [B, 26, H, W]
         
-        # Combine normalized predictions
-        context_probs = torch.cat([obj_probs, rel_probs], dim=1)  # [B, 62, H, W]
+        # GLOBAL POOLING: Get scene-level context from ALL positions
+        # Max-pool across spatial dimensions (H, W)
+        # This answers: "What objects/relations exist ANYWHERE in the scene?"
+        obj_global = obj_probs.max(dim=-1)[0].max(dim=-1)[0]  # [B, 36]
+        rel_global = rel_probs.max(dim=-1)[0].max(dim=-1)[0]  # [B, 26]
         
-        # Query: features + position encoding
-        pos = self.get_position_encoding(H, W, cls_feat.device)
-        Q = self.query_proj(cls_feat) + pos  # [B, C, H, W]
+        # Combine object and relation global context
+        global_context = torch.cat([obj_global, rel_global], dim=1)  # [B, 62]
         
-        # Key: from context probabilities (semantic content)
-        K = self.key_proj(context_probs)  # [B, C, H, W]
+        # Project to feature dimension
+        context_embed = self.context_proj(global_context)  # [B, dim]
         
-        # Match Q and K magnitudes for balanced attention
-        q_scale = Q.abs().mean().clamp(min=0.01)
-        k_scale = K.abs().mean().clamp(min=0.01)
-        K = K * (q_scale / k_scale)
+        # Broadcast to all spatial positions
+        # [B, dim] -> [B, dim, 1, 1] -> [B, dim, H, W]
+        context_broadcast = context_embed.unsqueeze(-1).unsqueeze(-1)
+        context_broadcast = context_broadcast.expand(-1, -1, H, W)  # [B, C, H, W]
         
-        # Value: features + projected context
-        context_features = self.context_to_value(context_probs)
-        # Scale context to match features
+        # Scale context to match feature magnitudes
         feat_scale = cls_feat.abs().mean().clamp(min=0.01)
-        ctx_scale = context_features.abs().mean().clamp(min=0.01)
-        context_features = context_features * (feat_scale / ctx_scale)
-        V = self.value_fusion(torch.cat([cls_feat, context_features], dim=1))
+        ctx_scale = context_broadcast.abs().mean().clamp(min=0.01)
+        context_scaled = context_broadcast * (feat_scale / ctx_scale)
         
-        # Reshape for multi-head attention: [B, heads, N, head_dim]
-        Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        # Apply learnable context scale
+        context_scaled = context_scaled * self.context_scale.abs().clamp(min=0.1, max=2.0)
         
-        # Attention: Q @ K^T / sqrt(d)
-        attn = (Q @ K.transpose(-2, -1)) * self.scale
-        attn_weights = F.softmax(attn, dim=-1)
+        # Fuse local features with global context
+        combined = torch.cat([cls_feat, context_scaled], dim=1)  # [B, 2C, H, W]
+        delta = self.fusion(combined)  # [B, C, H, W]
         
-        # Attend to values
-        attended = attn_weights @ V
-        
-        # Reshape back
-        attended = attended.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)
-        attended = self.out_proj(attended)
-        
-        # Residual + norm
-        out = self.norm(cls_feat + attended)
+        # Residual connection + normalization
+        out = self.norm(cls_feat + delta)
         
         if return_weights:
-            return out, attn_weights.mean(dim=1)
+            # Return dummy uniform weights for API compatibility
+            # (No actual attention in this module)
+            dummy_weights = torch.ones(B, H*W, H*W, device=cls_feat.device) / (H*W)
+            return out, dummy_weights
         return out
+
+
+# Keep original name as alias for backward compatibility
+class SceneContextAttention(GlobalSceneContext):
+    """Alias pointing to GlobalSceneContext for backward compatibility."""
+    pass
 
 
 # Keep old name as alias for compatibility
