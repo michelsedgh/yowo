@@ -159,7 +159,7 @@ def load_weight(model, path_to_ckpt=None):
         print('No trained weight ..')
         return model
         
-    checkpoint = torch.load(path_to_ckpt, map_location='cpu')
+    checkpoint = torch.load(path_to_ckpt, map_location='cpu', weights_only=False)
     # checkpoint state dict
     checkpoint_state_dict = checkpoint.pop("model")
     # model state dict

@@ -70,7 +70,7 @@ def build_yowo_multitask(args,
         # Resume from checkpoint
         if resume is not None:
             print('Resuming from: ', resume)
-            checkpoint = torch.load(resume, map_location='cpu')
+            checkpoint = torch.load(resume, map_location='cpu', weights_only=False)
             checkpoint_state_dict = checkpoint.pop("model")
             model.load_state_dict(checkpoint_state_dict)
 

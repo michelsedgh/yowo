@@ -217,6 +217,20 @@ def train():
 
     # lr scheduler
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.lr_epoch, args.lr_decay_ratio)
+    
+    # Load or advance LR scheduler if resuming from checkpoint
+    if start_epoch > 0 and args.resume is not None:
+        # Try to load saved scheduler state (most accurate)
+        checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
+        if 'lr_scheduler' in checkpoint:
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            print(f'✅ Loaded LR scheduler state, current LR: {lr_scheduler.get_last_lr()[0]:.6f}')
+        else:
+            # Fallback: manually step scheduler for old checkpoints
+            print(f'Advancing LR scheduler by {start_epoch} epochs for resume...')
+            for _ in range(start_epoch):
+                lr_scheduler.step()
+            print(f'✅ Current Learning Rate: {lr_scheduler.get_last_lr()[0]:.6f}')
 
     # warmup scheduler
     warmup_scheduler = build_warmup(d_cfg, base_lr=base_lr)
@@ -224,7 +238,15 @@ def train():
     # training configuration
     max_epoch = args.max_epoch
     epoch_size = len(dataloader)
-    warmup = True
+    
+    # Warmup should be skipped if resuming past the warmup phase
+    # wp_iter is measured in global iterations (iter + epoch * epoch_size)
+    total_past_iters = start_epoch * epoch_size if start_epoch > 0 else 0
+    if total_past_iters >= d_cfg['wp_iter']:
+        warmup = False
+        print(f'Warmup already completed in previous training (past {total_past_iters} iters, wp_iter={d_cfg["wp_iter"]})')
+    else:
+        warmup = True
     
     # Mixed Precision Training (AMP)
     if args.amp:
@@ -254,7 +276,7 @@ def train():
     # eval before training
     if args.eval_first and distributed_utils.is_main_process():
         # to check whether the evaluator can work
-        eval_one_epoch(args, model_without_ddp, evaluator, 0, path_to_save)
+        eval_one_epoch(args, model_without_ddp, evaluator, 0, path_to_save, optimizer, lr_scheduler)
 
     # start to train
     t0 = time.time()
@@ -346,10 +368,10 @@ def train():
         
         # evaluation
         if epoch % args.eval_epoch == 0 or (epoch + 1) == max_epoch:
-            eval_one_epoch(args, model_without_ddp, evaluator, epoch, path_to_save)
+            eval_one_epoch(args, model_without_ddp, evaluator, epoch, path_to_save, optimizer, lr_scheduler)
 
 
-def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save):
+def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, lr_scheduler):
     # check evaluator
     if distributed_utils.is_main_process():
         if evaluator is None:
@@ -374,6 +396,8 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save):
         weight_name = '{}_epoch_{}.pth'.format(args.version, epoch+1)
         checkpoint_path = os.path.join(path_to_save, weight_name)
         torch.save({'model': model_eval.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
                     'args': args}, 
                     checkpoint_path)                      
