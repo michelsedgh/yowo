@@ -59,9 +59,15 @@ class MultiTaskCriterion(object):
         # Loss functions
         self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
         self.obj_lossf = nn.CrossEntropyLoss(reduction='none')  # For exclusive object classification
-        self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')  # For multi-label actions
+        # Use Focal Loss for actions to handle class imbalance (rare actions get more focus)
+        from .loss import SigmoidFocalLoss
+        self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
         self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')  # For multi-label relations
-        # Note: interact_lossf removed - interaction head no longer exists
+        
+        # Label smoothing for multi-label heads (actions, relations)
+        # Helps prevent overconfidence and improves generalization
+        # 0.0 = no smoothing (default), 0.1 = 10% smoothing
+        self.label_smoothing = getattr(args, 'label_smoothing', 0.0)
             
         # Matcher (uses combined class representation for matching)
         self.matcher = SimOTA(
@@ -69,6 +75,22 @@ class MultiTaskCriterion(object):
             center_sampling_radius=args.center_sampling_radius,
             topk_candidate=args.topk_candicate
         )
+    
+    def apply_label_smoothing(self, labels: torch.Tensor, num_classes: int) -> torch.Tensor:
+        """
+        Apply label smoothing to multi-hot labels.
+        
+        For multi-hot labels:
+        - Positive labels: 1.0 -> 1.0 - smoothing + smoothing/num_classes
+        - Negative labels: 0.0 -> smoothing/num_classes
+        
+        This prevents the model from becoming overconfident.
+        """
+        if self.label_smoothing <= 0:
+            return labels
+        
+        smoothed = labels * (1 - self.label_smoothing) + self.label_smoothing / num_classes
+        return smoothed
 
     def __call__(self, outputs, targets):
         """
@@ -213,6 +235,8 @@ class MultiTaskCriterion(object):
             # Only compute action loss for Person boxes
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
+            # Apply label smoothing if enabled
+            person_act_targets = self.apply_label_smoothing(person_act_targets, self.num_actions)
             loss_act = self.act_lossf(person_act_preds, person_act_targets)
             loss_act = loss_act.sum() / is_person_masks.sum().clamp(1.0)
         else:
@@ -221,7 +245,9 @@ class MultiTaskCriterion(object):
         # ============ RELATION LOSS (BCE) ============
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]  # [num_fg, 26]
         if len(rel_targets) > 0:
-            loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)
+            # Apply label smoothing if enabled
+            smoothed_rel_targets = self.apply_label_smoothing(rel_targets, self.num_relations)
+            loss_rel = self.rel_lossf(matched_rel_preds, smoothed_rel_targets)
             loss_rel = loss_rel.sum() / num_foregrounds
         else:
             loss_rel = torch.tensor(0.0, device=device)

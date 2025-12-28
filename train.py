@@ -56,8 +56,8 @@ def parse_args():
     # Evaluation
     parser.add_argument('--eval', action='store_true', default=False, 
                         help='do evaluation during training.')
-    parser.add_argument('--eval_epoch', default=1, type=int, 
-                        help='after eval epoch, the model is evaluated on val dataset.')
+    parser.add_argument('--eval_epoch', default=3, type=int, 
+                        help='evaluate every N epochs (default: 3)')
     parser.add_argument('--save_dir', default='inference_results/',
                         type=str, help='save inference results.')
     parser.add_argument('--eval_first', action='store_true', default=False,
@@ -124,6 +124,8 @@ def parse_args():
                         help='reg loss weight factor.')
     parser.add_argument('-fl', '--focal_loss', action="store_true", default=False,
                         help="use focal loss for classification.")
+    parser.add_argument('--label_smoothing', default=0.0, type=float,
+                        help='Label smoothing factor for action/relation heads. 0.0=disabled, 0.1=10% smoothing.')
     
     # DDP train
     parser.add_argument('-dist', '--distributed', action='store_true', default=False,
@@ -280,7 +282,11 @@ def train():
 
     # start to train
     t0 = time.time()
+    epoch_times = []  # Track epoch durations for ETA
+    
     for epoch in range(start_epoch, max_epoch):
+        epoch_start = time.time()
+        
         if args.distributed:
             dataloader.batch_sampler.sampler.set_epoch(epoch)            
 
@@ -327,12 +333,25 @@ def train():
             else:
                 losses.backward()
 
+            # Cross-attention monitoring for multi-task models
+            # IMPORTANT: Must be called BEFORE zero_grad() to capture actual gradients!
+            if ca_monitor is not None:
+                ca_monitor.log_step(video_clips, targets, loss_dict, epoch, iter_i)
+
             # Optimize
             if ni % accumulate == 0:
                 if scaler is not None:
+                    # Unscale gradients before clipping
+                    scaler.unscale_(optimizer)
+                    # Gradient clipping
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+                    
                     scaler.step(optimizer)
                     scaler.update()
                 else:
+                    # Gradient clipping
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+                    
                     optimizer.step()
                 optimizer.zero_grad()
                     
@@ -347,12 +366,37 @@ def train():
             # Attention logging for multi-task models
             if attn_logger is not None and iter_i % 100 == 0:
                 attn_logger.log_attention(model_without_ddp, outputs, targets, epoch, iter_i)
-            
-            # Cross-attention monitoring for multi-task models
-            if ca_monitor is not None:
-                ca_monitor.log_step(video_clips, targets, loss_dict, epoch, iter_i)
 
         lr_scheduler.step()
+        
+        # Calculate epoch duration and ETA
+        epoch_duration = time.time() - epoch_start
+        epoch_times.append(epoch_duration)
+        
+        # Print epoch summary
+        if distributed_utils.is_main_process():
+            epoch_num = epoch + 1
+            remaining_epochs = max_epoch - epoch_num
+            
+            # Calculate ETA based on average epoch time
+            avg_epoch_time = sum(epoch_times) / len(epoch_times)
+            eta_seconds = remaining_epochs * avg_epoch_time
+            eta_hours = eta_seconds / 3600
+            
+            print(f"\n{'='*70}")
+            print(f"📊 EPOCH {epoch_num}/{max_epoch} COMPLETED")
+            print(f"   ⏱️  Epoch time: {epoch_duration/60:.1f} min | ETA: {eta_hours:.1f} hours")
+            print(f"   📈 Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
+            
+            # GPU memory if available
+            if args.cuda and torch.cuda.is_available():
+                mem_used = torch.cuda.max_memory_allocated() / 1024**3
+                mem_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                print(f"   🖥️  GPU Memory: {mem_used:.1f}/{mem_total:.1f} GB ({100*mem_used/mem_total:.0f}%)")
+                torch.cuda.reset_peak_memory_stats()  # Reset for next epoch
+            
+            print(f"   🎯 Remaining: {remaining_epochs} epochs")
+            print(f"{'='*70}\n")
         
         # Save attention epoch summary for multi-task models
         if attn_logger is not None:
@@ -366,19 +410,35 @@ def train():
         if ca_monitor is not None:
             ca_monitor.save_epoch_summary(epoch)
         
-        # evaluation
-        if epoch % args.eval_epoch == 0 or (epoch + 1) == max_epoch:
+        # Evaluation: every eval_epoch epochs OR at the last epoch
+        should_eval = (epoch + 1) % args.eval_epoch == 0 or (epoch + 1) == max_epoch
+        if should_eval:
+            if distributed_utils.is_main_process():
+                print(f"🔍 Running evaluation at epoch {epoch + 1}...")
             eval_one_epoch(args, model_without_ddp, evaluator, epoch, path_to_save, optimizer, lr_scheduler)
 
 
 def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, lr_scheduler):
     # check evaluator
     if distributed_utils.is_main_process():
+        # SAVE MODEL FIRST (before eval, so checkpoint exists even if eval crashes)
+        print(f'💾 Saving checkpoint for epoch {epoch + 1}...')
+        
+        weight_name = '{}_epoch_{}.pth'.format(args.version, epoch+1)
+        checkpoint_path = os.path.join(path_to_save, weight_name)
+        torch.save({'model': model_eval.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'lr_scheduler': lr_scheduler.state_dict(),
+                    'epoch': epoch,
+                    'args': args}, 
+                    checkpoint_path)
+        print(f'   ✅ Saved: {checkpoint_path}')
+        
+        # THEN EVALUATE
         if evaluator is None:
-            print('No evaluator ... save model and go on training.')
-            
+            print('No evaluator ... continuing training.')
         else:
-            print('eval ...')
+            print('🔍 Running evaluation...')
             # set eval mode
             model_eval.trainable = False
             model_eval.eval()
@@ -388,19 +448,7 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, 
                 
             # set train mode.
             model_eval.trainable = True
-            model_eval.train()
-
-        # save model
-        print('Saving state, epoch:', epoch + 1)
-        
-        weight_name = '{}_epoch_{}.pth'.format(args.version, epoch+1)
-        checkpoint_path = os.path.join(path_to_save, weight_name)
-        torch.save({'model': model_eval.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args}, 
-                    checkpoint_path)                      
+            model_eval.train()                      
 
     if args.distributed:
         # wait for all processes to synchronize
@@ -411,18 +459,28 @@ def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, time, accumul
     # basic infor
     log =  '[Epoch: {}/{}]'.format(epoch+1, max_epoch)
     log += '[Iter: {}/{}]'.format(iter_i, epoch_size)
-    log += '[lr: {:.6f}]'.format(lr[0])
-    # loss infor
+    
+    # Learning rate - show backbone LR too if different
+    if len(lr) > 1 and lr[0] != lr[1]:
+        log += '[lr: {:.6f}/{:.6f}]'.format(lr[0], lr[1])  # head/backbone
+    else:
+        log += '[lr: {:.6f}]'.format(lr[0])
+    
+    # loss info - organize by importance
+    total_loss = 0
     for k in loss_dict.keys():
         if k == 'losses':
-            log += '[{}: {:.2f}]'.format(k, loss_dict[k] * accumulate)
+            total_loss = loss_dict[k] * accumulate
         else:
             log += '[{}: {:.2f}]'.format(k, loss_dict[k])
+    
+    # Total loss at the end for visibility
+    log += '[total: {:.2f}]'.format(total_loss)
 
-    # other infor
-    log += '[time: {:.2f}]'.format(time)
+    # other info
+    log += '[time: {:.2f}s]'.format(time)
 
-    # print log infor
+    # print log info
     print(log, flush=True)
 
 

@@ -104,7 +104,7 @@ class Augmentation(object):
         
 
     def to_tensor(self, video_clip):
-        return [F.to_tensor(image) * 255. for image in video_clip]
+        return [F.to_tensor(image) for image in video_clip]
 
 
     def __call__(self, video_clip, target):
@@ -148,7 +148,7 @@ class BaseTransform(object):
 
 
     def to_tensor(self, video_clip):
-        return [F.to_tensor(image) * 255. for image in video_clip]
+        return [F.to_tensor(image) for image in video_clip]
 
 
     def __call__(self, video_clip, target=None, normalize=True):

@@ -47,6 +47,11 @@ class YOLO11Backbone(nn.Module):
             if idx not in self.save:
                 self.save.append(idx)
         self.save.sort()
+        
+        # IMPORTANT: Ultralytics loads with requires_grad=False by default
+        # We need to explicitly enable gradients for fine-tuning
+        for param in self.parameters():
+            param.requires_grad = True
 
     def forward(self, x):
         """

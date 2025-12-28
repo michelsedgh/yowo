@@ -41,8 +41,10 @@ class X3DBackbone(nn.Module):
     before the classification head. This provides rich spatiotemporal
     features suitable for action detection.
     
-    The output is a 2D feature map with temporal dimension averaged,
-    matching the interface expected by YOWO's channel encoder.
+    Uses LEARNABLE TEMPORAL ATTENTION (enhanced over vanilla X3D):
+    - Learns which timesteps are important for each action
+    - Combines attention-weighted features with multi-scale pooling
+    - Better than simple mean pooling for action detection
     """
     
     def __init__(self, model_name='x3d_s', pretrained=True):
@@ -66,6 +68,38 @@ class X3DBackbone(nn.Module):
         # Get feature dimension
         self.feat_dim = X3D_FEATURE_DIMS[model_name]
         
+        # ============ LEARNABLE TEMPORAL ATTENTION ============
+        # Learn which timesteps are most important for action detection
+        # This is better than simple averaging because:
+        # - Some actions are defined by end state (e.g., "opened" vs "opening")
+        # - Some actions need full context (e.g., "walking")
+        # - Model learns task-specific temporal weighting
+        
+        # Temporal attention: squeeze-excitation style
+        # Pools spatial, computes per-timestep importance
+        self.temporal_attention = nn.Sequential(
+            nn.AdaptiveAvgPool3d((None, 1, 1)),  # [B, C, T, 1, 1] - pool spatial
+            nn.Flatten(3),  # [B, C, T, 1] -> will be handled after
+        )
+        # Attention MLP: per-channel temporal weighting
+        self.attention_mlp = nn.Sequential(
+            nn.Conv1d(self.feat_dim, self.feat_dim // 4, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(self.feat_dim // 4, self.feat_dim, kernel_size=1),
+            nn.Sigmoid()
+        )
+        
+        # Multi-scale weights: learnable combination of different temporal views
+        # [attended, recent, overall]
+        self.scale_weights = nn.Parameter(torch.tensor([0.5, 0.3, 0.2]))
+        
+        # Final fusion: combine multi-scale temporal features
+        self.temporal_fusion = nn.Sequential(
+            nn.Conv2d(self.feat_dim, self.feat_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(self.feat_dim),
+            nn.ReLU(inplace=True)
+        )
+        
     def forward(self, x):
         """
         Forward pass through X3D backbone.
@@ -79,20 +113,43 @@ class X3DBackbone(nn.Module):
                
         Returns:
             Feature tensor of shape [B, feat_dim, H', W']
-            where H' and W' are the spatially downsampled dimensions
-            and temporal dimension has been averaged.
+            where H' and W' are the spatially downsampled dimensions.
+            Temporal dimension is pooled using LEARNABLE temporal attention.
         """
         # Pass through each backbone block
         for block in self.backbone:
             x = block(x)
         
-        # x shape: [B, C, T, H, W] where C=192, T depends on input
-        # Average over temporal dimension to get [B, C, H, W]
-        # This matches the interface expected by YOWO's channel encoder
-        if x.size(2) > 1:
-            x = torch.mean(x, dim=2, keepdim=True)
+        # x shape: [B, C, T', H, W] where C=192, T' depends on input (usually 2 for 16 frames)
+        B, C, T, H, W = x.shape
         
-        return x.squeeze(2)  # [B, C, H, W]
+        if T > 1:
+            # ============ LEARNABLE TEMPORAL ATTENTION ============
+            
+            # 1. Compute per-timestep attention weights
+            # Squeeze spatial dimensions
+            squeezed = x.mean(dim=[3, 4])  # [B, C, T]
+            attn_weights = self.attention_mlp(squeezed)  # [B, C, T]
+            attn_weights = attn_weights.unsqueeze(-1).unsqueeze(-1)  # [B, C, T, 1, 1]
+            
+            # 2. Apply attention and sum over time
+            attended = (x * attn_weights).sum(dim=2)  # [B, C, H, W]
+            
+            # 3. Multi-scale temporal features
+            recent = x[:, :, -1, :, :]     # [B, C, H, W] - last frame (most recent)
+            overall = x.mean(dim=2)         # [B, C, H, W] - average (overall context)
+            
+            # 4. Learnable weighted combination
+            weights = torch.softmax(self.scale_weights, dim=0)
+            x = weights[0] * attended + weights[1] * recent + weights[2] * overall
+            
+            # 5. Final fusion
+            x = self.temporal_fusion(x)
+        else:
+            # Only one temporal position, just squeeze
+            x = x.squeeze(2)  # [B, C, H, W]
+        
+        return x
 
 
 def build_x3d_3d(model_name='x3d_s', pretrained=True):

@@ -1,21 +1,18 @@
 """
 YOWO Multi-Task Architecture for Action Genome + Charades
 
-This module implements a four-head architecture that separates:
+This module implements a three-head architecture that separates:
 1. Object Head (36 classes) - Softmax/CE loss - "WHAT is it?"
-2. Action Head (157 classes) - Sigmoid/BCE loss - "WHAT is it doing?" (Person-only)
-3. Relation Head (26 classes) - Sigmoid/BCE loss - "HOW does it interact?"
-4. Interaction Head (1 class) - Sigmoid/BCE loss - "Is this object being interacted with?"
+2. Relation Head (26 classes) - Sigmoid/BCE loss - "HOW does it interact?"
+3. Action Head (157 classes) - Sigmoid/BCE loss - "WHAT is it doing?" (Person-only)
 
-The Interaction Head helps filter out background objects that are not being
-interacted with by the person. This is crucial for understanding "what is
-happening" in a scene.
-
-This is semantically superior to the "jammed" 219-class approach because:
+Key architectural features:
 - Objects are mutually exclusive (Softmax enforces this)
 - Actions only apply to Person boxes (masking prevents invalid learning)
 - Each head can specialize on its feature requirements
-- Interaction head filters non-interacted objects
+- Cascaded context: Object → Relation → Action
+- Location-aware global context for multi-person awareness
+- Multi-scale temporal pooling (recent + overall) in X3D backbone
 
 Reference: Action Genome dataset (https://arxiv.org/abs/1912.06992)
 """
@@ -124,16 +121,23 @@ class GlobalSceneContext(nn.Module):
        - "Is there a laptop ANYWHERE in the scene?" -> Yes/No confidence
     2. Pools relation predictions globally 
        - "Is there a 'holding' relation ANYWHERE?" -> Yes/No confidence  
-    3. Projects this global context to feature dimension
-    4. Broadcasts to all positions and fuses with local features
+    3. **NEW**: Also captures WHERE each max value was detected (location hints)
+       - Uses SOFT-ARGMAX for differentiable position extraction
+       - Enables multi-person awareness: "laptop at (0.3,0.4), chair at (0.8,0.7)"
+    4. Projects this global context to feature dimension
+    5. Broadcasts to all positions and fuses with local features
     
     This way, the action prediction at EVERY position knows:
-    - All objects present in the scene
-    - All relations happening in the scene
-    - And can predict actions accordingly
+    - All objects present in the scene + WHERE they are
+    - All relations happening in the scene + WHERE they occur
+    - Model can learn to use or ignore position based on action type
     
-    Example: Person, laptop, couch detected + sitting_on, holding relations
-    -> Action head knows: "typing on laptop", "sitting on couch" are likely
+    Example: Person A with laptop at left, Person B with chair at right
+    -> Model learns position-aware action associations
+    
+    SOFT-ARGMAX: Instead of hard argmax (non-differentiable), we use softmax-weighted
+    expected positions. This allows gradients to flow through position computations,
+    enabling the model to directly learn position-action associations.
     """
     def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=4):
         super().__init__()
@@ -142,10 +146,20 @@ class GlobalSceneContext(nn.Module):
         self.num_relations = num_relations
         # num_heads kept for API compatibility but not used
         
-        # Project global context (obj + rel) to feature dimension
+        # Context input dimension:
+        # - Object confidences: num_objects (36)
+        # - Relation confidences: num_relations (26) 
+        # - Object absolute locations (y, x): num_objects * 2 (72)
+        # - Relation absolute locations (y, x): num_relations * 2 (52)
+        # - Object relative-to-person (dy, dx): num_objects * 2 (72)  <- NEW!
+        # - Relation relative-to-person (dy, dx): num_relations * 2 (52)  <- NEW!
+        # Total: 36 + 26 + 72 + 52 + 72 + 52 = 310
+        context_input_dim = (num_objects + num_relations) * 5  # conf + abs_y + abs_x + rel_y + rel_x
+        
+        # Project global context (obj + rel + locations) to feature dimension
         # Using a small MLP to learn the mapping
         self.context_proj = nn.Sequential(
-            nn.Linear(num_objects + num_relations, dim),
+            nn.Linear(context_input_dim, dim),
             nn.GELU(),
             nn.Linear(dim, dim)
         )
@@ -174,6 +188,45 @@ class GlobalSceneContext(nn.Module):
         
         # GroupNorm for stable training
         self.norm = nn.GroupNorm(32, dim)
+        
+        # Temperature for soft-argmax (lower = sharper, closer to hard argmax)
+        # 0.1 is a good balance: sharp enough to approximate argmax, but still differentiable
+        self.temperature = 0.1
+    
+    def soft_argmax_2d(self, probs: torch.Tensor, H: int, W: int) -> tuple:
+        """
+        Compute soft (differentiable) argmax coordinates.
+        
+        Instead of returning the index of the max value (non-differentiable),
+        this returns the expected position using softmax-weighted coordinates.
+        
+        Args:
+            probs: [B, C, H*W] - probability distribution over spatial positions
+            H, W: Spatial dimensions
+            
+        Returns:
+            y, x: [B, C] - expected coordinates in [0, 1]
+        """
+        B, C, HW = probs.shape
+        device = probs.device
+        
+        # Create normalized coordinate grids [0, 1]
+        y_coords = torch.arange(H, device=device).float() / max(H - 1, 1)
+        x_coords = torch.arange(W, device=device).float() / max(W - 1, 1)
+        y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
+        
+        y_flat = y_grid.flatten()  # [HW]
+        x_flat = x_grid.flatten()  # [HW]
+        
+        # Sharpen with temperature and normalize to get attention weights
+        # Lower temperature = more peaked distribution (closer to argmax)
+        weights = F.softmax(probs / self.temperature, dim=-1)  # [B, C, HW]
+        
+        # Compute expected (weighted average) coordinates
+        y = (weights * y_flat).sum(dim=-1)  # [B, C]
+        x = (weights * x_flat).sum(dim=-1)  # [B, C]
+        
+        return y, x
     
     def forward(self, cls_feat, obj_pred, rel_pred, return_weights=False):
         """
@@ -190,14 +243,55 @@ class GlobalSceneContext(nn.Module):
         obj_probs = F.softmax(obj_pred, dim=1)  # [B, 36, H, W]
         rel_probs = torch.sigmoid(rel_pred)     # [B, 26, H, W]
         
-        # GLOBAL POOLING: Get scene-level context from ALL positions
+        # === GLOBAL CONFIDENCE VALUES ===
         # Max-pool across spatial dimensions (H, W)
         # This answers: "What objects/relations exist ANYWHERE in the scene?"
         obj_global = obj_probs.max(dim=-1)[0].max(dim=-1)[0]  # [B, 36]
         rel_global = rel_probs.max(dim=-1)[0].max(dim=-1)[0]  # [B, 26]
         
-        # Combine object and relation global context
-        global_context = torch.cat([obj_global, rel_global], dim=1)  # [B, 62]
+        # === LOCATION HINTS (DIFFERENTIABLE!) ===
+        # For each class, WHERE is the expected position of that class?
+        # Uses soft-argmax for differentiable position extraction
+        
+        # Flatten spatial dims for soft-argmax
+        obj_flat = obj_probs.view(B, self.num_objects, -1)  # [B, 36, H*W]
+        obj_y, obj_x = self.soft_argmax_2d(obj_flat, H, W)  # [B, 36] each
+        
+        # Same for relations
+        rel_flat = rel_probs.view(B, self.num_relations, -1)  # [B, 26, H*W]
+        rel_y, rel_x = self.soft_argmax_2d(rel_flat, H, W)  # [B, 26] each
+        
+        
+        # === RELATIVE-TO-PERSON POSITIONS (NEW!) ===
+        # Person is object class 0 - compute distances from person to all objects/relations
+        # This directly answers: "How far is the laptop from the person?"
+        person_y = obj_y[:, 0:1]  # [B, 1] - person's Y position
+        person_x = obj_x[:, 0:1]  # [B, 1] - person's X position
+        
+        # Relative positions: (object_pos - person_pos)
+        # Values in range [-1, 1]: negative = above/left of person, positive = below/right
+        obj_rel_y = obj_y - person_y  # [B, 36] - each object's Y relative to person
+        obj_rel_x = obj_x - person_x  # [B, 36] - each object's X relative to person
+        rel_rel_y = rel_y - person_y  # [B, 26] - each relation's Y relative to person
+        rel_rel_x = rel_x - person_x  # [B, 26] - each relation's X relative to person
+        
+        # === COMBINE EVERYTHING ===
+        # Confidences (62) + Absolute positions (124) + Relative positions (124) = 310
+        global_context = torch.cat([
+            # What exists in the scene?
+            obj_global,   # Object confidences (36)
+            rel_global,   # Relation confidences (26)
+            # WHERE are they in the frame? (absolute)
+            obj_y,        # Object Y positions (36)
+            obj_x,        # Object X positions (36)
+            rel_y,        # Relation Y positions (26)
+            rel_x,        # Relation X positions (26)
+            # WHERE are they RELATIVE TO PERSON? (explicit relative)
+            obj_rel_y,    # Object Y relative to person (36)
+            obj_rel_x,    # Object X relative to person (36)
+            rel_rel_y,    # Relation Y relative to person (26)
+            rel_rel_x     # Relation X relative to person (26)
+        ], dim=1)  # [B, 310]
         
         # Project to feature dimension
         context_embed = self.context_proj(global_context)  # [B, dim]
@@ -247,15 +341,85 @@ ObjectCrossAttention = ObjectContextModule
 ObjectRelationCrossAttention = ObjectRelationContextModule
 
 
+class ActionObjectCooccurrence(nn.Module):
+    """
+    Explicit action-object co-occurrence modeling.
+    
+    This module learns which objects commonly co-occur with which actions:
+    - "typing" strongly associated with "laptop", "keyboard"
+    - "eating" strongly associated with "food", "fork", "spoon"
+    - "sitting" strongly associated with "chair", "couch", "bed"
+    
+    The matrix is initialized small and learned from data.
+    It provides an additional signal to the action head based on detected objects.
+    
+    Integration:
+        Applied AFTER computing action logits, adding object-based priors.
+    """
+    
+    def __init__(self, num_actions: int = 157, num_objects: int = 36, 
+                 hidden_dim: int = 64, temperature: float = 0.1):
+        super().__init__()
+        self.num_actions = num_actions
+        self.num_objects = num_objects
+        self.temperature = temperature
+        
+        # Learnable co-occurrence embeddings
+        # Low-rank factorization: M = action_embed @ object_embed.T
+        # More efficient than full 157x36 matrix
+        self.action_embed = nn.Parameter(torch.randn(num_actions, hidden_dim) * 0.01)
+        self.object_embed = nn.Parameter(torch.randn(num_objects, hidden_dim) * 0.01)
+        
+        # Scale factor for co-occurrence contribution (starts small, model learns to increase)
+        self.cooc_scale = nn.Parameter(torch.tensor(0.1))
+        
+    def get_cooccurrence_matrix(self) -> torch.Tensor:
+        """Get the full co-occurrence matrix (for visualization/analysis)."""
+        return torch.matmul(self.action_embed, self.object_embed.T)  # [num_actions, num_objects]
+    
+    def forward(self, action_logits: torch.Tensor, object_probs: torch.Tensor) -> torch.Tensor:
+        """
+        Apply object-based action priors.
+        
+        Args:
+            action_logits: [B, num_actions, H, W] - raw action predictions
+            object_probs: [B, num_objects, H, W] - softmax object probabilities
+            
+        Returns:
+            enhanced_logits: [B, num_actions, H, W] - action logits with object priors
+        """
+        B, A, H, W = action_logits.shape
+        
+        # Compute co-occurrence matrix
+        cooc = torch.matmul(self.action_embed, self.object_embed.T)  # [A, O]
+        
+        # Global object presence (max-pool across space)
+        obj_global = object_probs.max(dim=-1)[0].max(dim=-1)[0]  # [B, O]
+        
+        # Object-to-action contribution: which actions are likely given these objects?
+        action_prior = torch.matmul(obj_global, cooc.T)  # [B, A]
+        
+        # Broadcast to spatial dimensions
+        action_prior = action_prior.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, H, W)  # [B, A, H, W]
+        
+        # Add scaled prior to logits
+        enhanced_logits = action_logits + self.cooc_scale * action_prior
+        
+        return enhanced_logits
+
+
 class YOWOMultiTask(nn.Module):
     """
     YOWO with Multi-Task Heads for Action Genome + Charades.
     
-    Instead of a single cls_preds head with 219 classes, this model has:
+    Three prediction heads in a cascaded architecture:
     - obj_preds: Object identity (36 classes, Softmax)
-    - act_preds: Actions (157 classes, Sigmoid, Person-only)
-    - rel_preds: Relations (26 classes, Sigmoid)
-    - interact_preds: Is object being interacted with? (1 class, Sigmoid)
+    - rel_preds: Relations (26 classes, Sigmoid) - receives object context
+    - act_preds: Actions (157 classes, Sigmoid, Person-only) - receives object+relation+location context
+    
+    Key features:
+    - Location-aware global scene context for multi-person awareness
+    - Multi-scale temporal pooling in X3D backbone
     """
     
     def __init__(self, 
@@ -280,6 +444,10 @@ class YOWOMultiTask(nn.Module):
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
         self.topk = topk
+        
+        # ImageNet normalization for 3D branch (X3D) - Kinetics standard
+        self.register_buffer('pixel_mean', torch.tensor([0.45, 0.45, 0.45]).view(1, 3, 1, 1, 1))
+        self.register_buffer('pixel_std', torch.tensor([0.225, 0.225, 0.225]).view(1, 3, 1, 1, 1))
 
         # ------------------ Network ---------------------
         ## 2D backbone
@@ -360,6 +528,16 @@ class YOWOMultiTask(nn.Module):
         
         # NOTE: Interaction head REMOVED - redundant with negative relation classes
         # (notlookingat, unsure, notcontacting already indicate no interaction)
+        
+        # ============ ACTION-OBJECT CO-OCCURRENCE ============
+        # Learns which actions commonly co-occur with which objects
+        # E.g., "typing" -> "laptop", "eating" -> "food", "sitting" -> "chair"
+        self.action_object_cooc = ActionObjectCooccurrence(
+            num_actions=self.num_actions,
+            num_objects=self.num_objects,
+            hidden_dim=64,
+            temperature=0.1
+        )
         
         # Box regression (unchanged)
         self.reg_preds = nn.ModuleList(
@@ -529,11 +707,12 @@ class YOWOMultiTask(nn.Module):
         """Inference mode: returns post-processed detections."""
         B, _, _, img_h, img_w = video_clips.shape
         
-        # Key frame
-        key_frame = video_clips[:, :, -1, :, :]
+        # 3D backbone (with ImageNet normalization)
+        video_clips_3d = (video_clips - self.pixel_mean) / self.pixel_std
+        feat_3d = self.backbone_3d(video_clips_3d)
         
-        # 3D backbone
-        feat_3d = self.backbone_3d(video_clips)
+        # Extract key frame (last frame of clip) for 2D backbone
+        key_frame = video_clips[:, :, -1, :, :]
         
         # 2D backbone
         cls_feats, reg_feats = self.backbone_2d(key_frame)
@@ -569,6 +748,10 @@ class YOWOMultiTask(nn.Module):
             # Step 3: Action prediction (sees objects + relations via cross-attention)
             act_feat = self.obj_rel_cross_attn[level](cls_feat, obj_pred, rel_pred)
             act_pred = self.act_preds[level](act_feat)  # Object+Relation-aware!
+            
+            # Step 4: Apply action-object co-occurrence priors
+            obj_probs = F.softmax(obj_pred, dim=1)
+            act_pred = self.action_object_cooc(act_pred, obj_probs)
             
             reg_pred = self.reg_preds[level](reg_feat)
             
@@ -629,8 +812,9 @@ class YOWOMultiTask(nn.Module):
         # Training mode
         key_frame = video_clips[:, :, -1, :, :]
         
-        # 3D backbone
-        feat_3d = self.backbone_3d(video_clips)
+        # 3D backbone (with ImageNet normalization)
+        video_clips_3d = (video_clips - self.pixel_mean) / self.pixel_std
+        feat_3d = self.backbone_3d(video_clips_3d)
         
         # 2D backbone
         cls_feats, reg_feats = self.backbone_2d(key_frame)
@@ -666,6 +850,10 @@ class YOWOMultiTask(nn.Module):
             # Step 3: Action prediction (sees objects + relations via cross-attention)
             act_feat = self.obj_rel_cross_attn[level](cls_feat, obj_pred, rel_pred)
             act_pred = self.act_preds[level](act_feat)  # Object+Relation-aware!
+            
+            # Step 4: Apply action-object co-occurrence priors
+            obj_probs = F.softmax(obj_pred, dim=1)
+            act_pred = self.action_object_cooc(act_pred, obj_probs)
             
             reg_pred = self.reg_preds[level](reg_feat)
             

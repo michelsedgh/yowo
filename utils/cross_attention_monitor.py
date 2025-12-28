@@ -199,13 +199,29 @@ class CrossAttentionMonitor:
         if isinstance(loss_obj, torch.Tensor): loss_obj = loss_obj.item()
         if isinstance(loss_rel, torch.Tensor): loss_rel = loss_rel.item()
         
+        # Get additional model metrics
+        model = self._get_model()
+        cooc_scale = 0.1
+        if hasattr(model, 'action_object_cooc'):
+            cooc_scale = model.action_object_cooc.cooc_scale.item()
+        
+        # X3D temporal weights
+        temporal_weights = "N/A"
+        if hasattr(model, 'backbone_3d') and hasattr(model.backbone_3d, 'backbone'):
+            x3d = model.backbone_3d.backbone
+            if hasattr(x3d, 'scale_weights'):
+                sw = F.softmax(x3d.scale_weights, dim=0)
+                temporal_weights = f"recent={sw[0]:.2f}/mid={sw[1]:.2f}/overall={sw[2]:.2f}"
+        
         # Print compact, useful log
         print(f"\n[Context Monitor] Epoch {epoch+1}, Iter {iter_i}")
         print(f"  📦 Obj conf: {metrics['obj_confidence']:.3f} | "
               f"Person: {metrics['person_confidence']:.3f} | "
               f"Relations: {metrics['relations_active']:.3f}")
         print(f"  🔗 Context contribution: {metrics['context_contribution']:.2f}x | "
-              f"Scale: {metrics.get('context_scale', 1.0):.3f}")
+              f"Scale: {metrics.get('context_scale', 1.0):.3f} | "
+              f"CoocScale: {cooc_scale:.3f}")
+        print(f"  ⏱️  X3D temporal: {temporal_weights}")
         print(f"  📈 Gradients: SceneCtx={metrics.get('scene_ctx_grad', 0):.4f}, "
               f"ObjCtx={metrics.get('obj_ctx_grad', 0):.4f}, "
               f"ActHead={metrics.get('act_head_grad', 0):.4f}")

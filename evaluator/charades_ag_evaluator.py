@@ -328,8 +328,8 @@ class CharadesAGEvaluator:
                 for det in detections:
                     box = det[:4]  # normalized [x1, y1, x2, y2]
                     conf = det[4]
-                    # interact = det[5]  # not used for mAP
-                    labels = det[6:]  # [obj_36, act_157, rel_26]
+                    # Labels start at index 5: [obj_36, act_157, rel_26] = 219 dims
+                    labels = det[5:]  # Fixed: was det[6:], but labels start at 5
                     
                     if conf < self.conf_thresh:
                         continue

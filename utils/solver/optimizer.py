@@ -21,23 +21,43 @@ def build_optimizer(cfg, model, base_lr=0.0, resume=None):
     print('--momentum: {}'.format(cfg['momentum']))
     print('--weight_decay: {}'.format(cfg['weight_decay']))
 
+    # Separate parameters into groups with different learning rates
+    # Backbones (pretrained) get a smaller LR, Heads/Context get full base_lr
+    backbone_params = []
+    head_params = []
+    
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if 'backbone' in name:
+            backbone_params.append(param)
+        else:
+            head_params.append(param)
+            
+    param_groups = [
+        {'params': head_params, 'lr': base_lr},
+        {'params': backbone_params, 'lr': base_lr * 0.1}
+    ]
+    
+    print(f'--Backbone parameters: {len(backbone_params)}')
+    print(f'--Head/Context parameters: {len(head_params)}')
+    print(f'--Backbone LR: {base_lr * 0.1:.6f}')
+    print(f'--Head/Context LR: {base_lr:.6f}')
+
     if cfg['optimizer'] == 'sgd':
         optimizer = optim.SGD(
-            model.parameters(), 
-            lr=base_lr,
+            param_groups, 
             momentum=cfg['momentum'],
             weight_decay=cfg['weight_decay'])
 
     elif cfg['optimizer'] == 'adam':
         optimizer = optim.Adam(
-            model.parameters(), 
-            lr=base_lr,
-            weight_decay=cfg['weight_decay'])  # Fixed: was 'eight_decay'
+            param_groups, 
+            weight_decay=cfg['weight_decay'])
                                 
     elif cfg['optimizer'] == 'adamw':
         optimizer = optim.AdamW(
-            model.parameters(), 
-            lr=base_lr,
+            param_groups, 
             weight_decay=cfg['weight_decay'])
     else:
         raise ValueError(f"Unknown optimizer: {cfg['optimizer']}")

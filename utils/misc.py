@@ -91,6 +91,7 @@ def build_dataset(d_cfg, args, is_train=False):
 
     elif args.dataset == 'charades_ag':
         from dataset.charades_ag import CharadesAGDataset
+        from evaluator.charades_ag_evaluator import CharadesAGEvaluator
         data_dir = os.path.join(args.root, 'ActionGenome')
         
         # dataset
@@ -104,7 +105,21 @@ def build_dataset(d_cfg, args, is_train=False):
             sampling_rate=d_cfg['sampling_rate']
         )
         num_classes = d_cfg['valid_num_classes']
-        evaluator = None # We would need to implement a CharadesAGEvaluator
+        
+        # evaluator
+        evaluator = CharadesAGEvaluator(
+            d_cfg=d_cfg,
+            data_root=args.root,  # evaluator adds 'ActionGenome' internally
+            img_size=d_cfg['test_size'],
+            len_clip=args.len_clip,
+            sampling_rate=d_cfg['sampling_rate'],
+            batch_size=args.test_batch_size,
+            transform=basetransform,
+            collate_fn=CollateFunc(),
+            conf_thresh=args.conf_thresh,
+            iou_thresh=args.nms_thresh,
+            save_path='./evaluator/eval_results/'
+        )
 
     else:
         print('unknow dataset !! Only support ucf24 & jhmdb21 & ava_v2.2 !!')
