@@ -427,7 +427,123 @@ class CharadesAGEvaluator:
         np.save(save_file, results)
         print(f"\nResults saved to: {save_file}")
         
+        # Also compute classification-only metrics (using matched boxes)
+        self._compute_classification_metrics(all_gt, all_det, epoch)
+        
         return results
+    
+    def _compute_classification_metrics(self, all_gt, all_det, epoch):
+        """
+        Compute classification accuracy metrics ONLY for detected boxes that matched GT.
+        
+        This gives a cleaner view of "how well is the model classifying?" 
+        without penalizing for localization errors.
+        
+        Metrics computed:
+        - Action recall @ IoU=0.5: Of all GT person actions, how many were correctly predicted?
+        - Object accuracy @ IoU=0.5: Of matched boxes, what % had correct object class?
+        - Action multi-label F1: F1 score for multi-label action prediction
+        """
+        print(f"\n{'='*60}")
+        print(f"CLASSIFICATION METRICS (on IoU≥0.5 matched boxes)")
+        print(f"{'='*60}")
+        
+        # Track metrics
+        obj_correct = 0
+        obj_total = 0
+        
+        act_tp = 0  # True positives for actions
+        act_fp = 0  # False positives
+        act_fn = 0  # False negatives
+        
+        rel_tp = 0
+        rel_fp = 0
+        rel_fn = 0
+        
+        person_action_correct = 0
+        person_action_total = 0
+        
+        # For each frame, match detections to GT and compute classification metrics
+        for frame_id, gt_items in all_gt.items():
+            det_items = all_det.get(frame_id, [])
+            
+            # Track which GTs have been matched
+            gt_matched = [False] * len(gt_items)
+            
+            for det_box, det_conf, det_labels in det_items:
+                # Find best matching GT
+                best_iou = 0.0
+                best_gt_idx = -1
+                
+                for g_idx, (gt_box, gt_labels) in enumerate(gt_items):
+                    if gt_matched[g_idx]:
+                        continue
+                    iou = self._compute_iou(det_box, gt_box)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_gt_idx = g_idx
+                
+                if best_iou >= self.iou_thresh and best_gt_idx >= 0:
+                    gt_matched[best_gt_idx] = True
+                    gt_box, gt_labels = gt_items[best_gt_idx]
+                    
+                    # Object classification accuracy
+                    pred_obj = np.argmax(det_labels[:self.num_objects])
+                    gt_obj = np.argmax(gt_labels[:self.num_objects])
+                    if pred_obj == gt_obj:
+                        obj_correct += 1
+                    obj_total += 1
+                    
+                    # Action metrics (multi-label) - only for person boxes
+                    if gt_obj == 0:  # Person class
+                        gt_acts = gt_labels[self.num_objects:self.num_objects+self.num_actions] > 0.5
+                        pred_acts = det_labels[self.num_objects:self.num_objects+self.num_actions] > 0.3  # Lower threshold for predictions
+                        
+                        # Count TP, FP, FN
+                        act_tp += np.sum(gt_acts & pred_acts)
+                        act_fp += np.sum(~gt_acts & pred_acts)
+                        act_fn += np.sum(gt_acts & ~pred_acts)
+                        
+                        # Also count if ANY action is correct
+                        if np.any(gt_acts & pred_acts):
+                            person_action_correct += 1
+                        person_action_total += 1
+                    
+                    # Relation metrics (multi-label)
+                    gt_rels = gt_labels[self.num_objects+self.num_actions:] > 0.5
+                    pred_rels = det_labels[self.num_objects+self.num_actions:] > 0.3
+                    
+                    rel_tp += np.sum(gt_rels & pred_rels)
+                    rel_fp += np.sum(~gt_rels & pred_rels)
+                    rel_fn += np.sum(gt_rels & ~pred_rels)
+        
+        # Compute final metrics
+        obj_accuracy = obj_correct / max(obj_total, 1) * 100
+        
+        act_precision = act_tp / max(act_tp + act_fp, 1)
+        act_recall = act_tp / max(act_tp + act_fn, 1)
+        act_f1 = 2 * act_precision * act_recall / max(act_precision + act_recall, 1e-8) * 100
+        
+        rel_precision = rel_tp / max(rel_tp + rel_fp, 1)
+        rel_recall = rel_tp / max(rel_tp + rel_fn, 1)
+        rel_f1 = 2 * rel_precision * rel_recall / max(rel_precision + rel_recall, 1e-8) * 100
+        
+        person_act_rate = person_action_correct / max(person_action_total, 1) * 100
+        
+        print(f"  📦 Object Accuracy (matched boxes): {obj_accuracy:.1f}% ({obj_correct}/{obj_total})")
+        print(f"  🎬 Action F1 (person boxes only):   {act_f1:.1f}% (P={act_precision*100:.1f}%, R={act_recall*100:.1f}%)")
+        print(f"  👤 Person boxes with ≥1 correct action: {person_act_rate:.1f}% ({person_action_correct}/{person_action_total})")
+        print(f"  🔗 Relation F1 (all boxes):         {rel_f1:.1f}% (P={rel_precision*100:.1f}%, R={rel_recall*100:.1f}%)")
+        print(f"{'='*60}")
+        
+        return {
+            'obj_accuracy': obj_accuracy,
+            'act_f1': act_f1,
+            'act_precision': act_precision * 100,
+            'act_recall': act_recall * 100,
+            'rel_f1': rel_f1,
+            'person_any_action_rate': person_act_rate
+        }
 
 
 if __name__ == "__main__":
