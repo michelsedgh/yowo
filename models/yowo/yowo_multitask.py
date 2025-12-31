@@ -664,8 +664,7 @@ class YOWOMultiTask(nn.Module):
         rel_preds = torch.cat(all_rel_preds, dim=0)
         box_preds = torch.cat(all_box_preds, dim=0)
         
-        # Combine all class predictions for compatibility
-        # Format: [obj_36, act_157, rel_26] = 219 dims
+        # Concatenate all class predictions: [obj(36), act(157), rel(26)] = 219
         cls_preds = torch.cat([obj_preds, act_preds, rel_preds], dim=-1)
         
         # To CPU/numpy
@@ -673,33 +672,93 @@ class YOWOMultiTask(nn.Module):
         labels = cls_preds.cpu().numpy()
         bboxes = box_preds.cpu().numpy()
         
-        # NMS using object class (first 36 dims)
+        # Get object class for each detection (for class-aware NMS)
         obj_labels = obj_preds.argmax(dim=-1).cpu().numpy()
-        scores_for_nms, labels_for_nms, bboxes = multiclass_nms(
-            scores, obj_labels, bboxes, self.nms_thresh, self.num_objects, False)
         
-        # Reconstruct output with full labels
-        if len(bboxes) > 0:
-            surviving_mask = np.isin(
-                np.arange(len(box_preds.cpu().numpy())), 
-                np.where(np.isin(box_preds.cpu().numpy().sum(axis=1), bboxes.sum(axis=1)))[0]
-            )
-            if surviving_mask.sum() > 0:
-                labels = labels[surviving_mask[:len(labels)]][:len(bboxes)]
-                scores_for_nms = scores_for_nms[:len(bboxes)]
+        # Apply NMS and track which indices survive
+        # Using class-aware NMS (class_agnostic=False means different classes don't suppress each other)
+        keep_indices = self._nms_with_indices(scores, obj_labels, bboxes, self.nms_thresh)
         
-        # Output: [x1, y1, x2, y2, conf, classes...]
-        # Classes start at index 5 (no separate interact score needed)
-        if len(bboxes) > 0:
+        if len(keep_indices) > 0:
+            # Use the surviving indices to get correct labels
+            scores = scores[keep_indices]
+            labels = labels[keep_indices]
+            bboxes = bboxes[keep_indices]
+            
+            # Output: [x1, y1, x2, y2, conf, classes...]
             out_boxes = np.concatenate([
-                bboxes,                          # [0:4] bbox
-                scores_for_nms[..., None],       # [4] confidence
-                labels                           # [5:] classes (obj+act+rel = 219)
+                bboxes,                  # [0:4] bbox
+                scores[..., None],       # [4] confidence  
+                labels                   # [5:] classes (obj+act+rel = 219)
             ], axis=-1)
         else:
             out_boxes = np.zeros((0, 5 + self.num_classes))
         
         return out_boxes
+    
+    def _nms_with_indices(self, scores, labels, bboxes, nms_thresh):
+        """Apply class-aware NMS and return indices of kept detections."""
+        if len(scores) == 0:
+            return np.array([], dtype=np.int64)
+        
+        # Get unique object classes
+        unique_labels = np.unique(labels)
+        keep_indices = []
+        
+        for label in unique_labels:
+            # Get detections of this class
+            class_mask = labels == label
+            class_indices = np.where(class_mask)[0]
+            
+            if len(class_indices) == 0:
+                continue
+            
+            class_boxes = bboxes[class_indices]
+            class_scores = scores[class_indices]
+            
+            # Apply NMS within this class
+            x1 = class_boxes[:, 0]
+            y1 = class_boxes[:, 1]
+            x2 = class_boxes[:, 2]
+            y2 = class_boxes[:, 3]
+            areas = (x2 - x1) * (y2 - y1)
+            
+            order = class_scores.argsort()[::-1]
+            class_keep = []
+            
+            while len(order) > 0:
+                i = order[0]
+                class_keep.append(i)
+                
+                if len(order) == 1:
+                    break
+                
+                # Compute IoU
+                xx1 = np.maximum(x1[i], x1[order[1:]])
+                yy1 = np.maximum(y1[i], y1[order[1:]])
+                xx2 = np.minimum(x2[i], x2[order[1:]])
+                yy2 = np.minimum(y2[i], y2[order[1:]])
+                
+                w = np.maximum(0, xx2 - xx1)
+                h = np.maximum(0, yy2 - yy1)
+                inter = w * h
+                iou = inter / (areas[i] + areas[order[1:]] - inter + 1e-10)
+                
+                # Keep low IoU detections
+                inds = np.where(iou <= nms_thresh)[0]
+                order = order[inds + 1]
+            
+            # Map back to original indices
+            keep_indices.extend(class_indices[class_keep].tolist())
+        
+        # Sort by score (descending)
+        if len(keep_indices) > 0:
+            keep_indices = np.array(keep_indices)
+            keep_scores = scores[keep_indices]
+            sorted_order = keep_scores.argsort()[::-1]
+            keep_indices = keep_indices[sorted_order]
+        
+        return np.array(keep_indices, dtype=np.int64)
 
 
     @torch.no_grad()
