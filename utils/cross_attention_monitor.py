@@ -205,11 +205,18 @@ class CrossAttentionMonitor:
         if hasattr(model, 'action_object_cooc'):
             cooc_scale = model.action_object_cooc.cooc_scale.item()
         
-        # X3D temporal weights
+        # X3D temporal pathway weights (dual-pathway architecture)
         temporal_weights = "N/A"
+        pathway_info = ""
         if hasattr(model, 'backbone_3d') and hasattr(model.backbone_3d, 'backbone'):
             x3d = model.backbone_3d.backbone
-            if hasattr(x3d, 'scale_weights'):
+            # New dual-pathway architecture
+            if hasattr(x3d, 'get_pathway_weights'):
+                pw = x3d.get_pathway_weights()
+                temporal_weights = f"Attn={pw['attention_weight']:.2f}/Max={pw['max_weight']:.2f}"
+                pathway_info = f"  🔀 Attn scales: {[f'{w:.2f}' for w in pw['attention_scales']]} | Max scales: {[f'{w:.2f}' for w in pw['max_scales']]}"
+            # Old single-pathway architecture (backward compat)
+            elif hasattr(x3d, 'scale_weights'):
                 sw = F.softmax(x3d.scale_weights, dim=0)
                 temporal_weights = f"recent={sw[0]:.2f}/mid={sw[1]:.2f}/overall={sw[2]:.2f}"
         
@@ -222,6 +229,8 @@ class CrossAttentionMonitor:
               f"Scale: {metrics.get('context_scale', 1.0):.3f} | "
               f"CoocScale: {cooc_scale:.3f}")
         print(f"  ⏱️  X3D temporal: {temporal_weights}")
+        if pathway_info:
+            print(pathway_info)
         print(f"  📈 Gradients: SceneCtx={metrics.get('scene_ctx_grad', 0):.4f}, "
               f"ObjCtx={metrics.get('obj_ctx_grad', 0):.4f}, "
               f"ActHead={metrics.get('act_head_grad', 0):.4f}")
