@@ -12,36 +12,41 @@ def build_model(args,
     """
     Build action detection model.
     
-    Automatically selects multi-task architecture when:
-    1. Model version ends with '_multitask', OR
-    2. Dataset config has 'multi_task': True
+    For Action Genome (multi_task=True):
+    - Uses YOWOMultiTask model with position-aware object context
+    - Separate object head, then action/relation with enriched features
+    
+    For standard datasets (UCF24, AVA):
+    - Uses original YOWO model
     """
-    # Check if multi-task architecture should be used
+    # Check if multi-task
     use_multitask = (
         '_multitask' in args.version or
         m_cfg.get('multi_task', False) or
         d_cfg.get('multi_task', False)
     )
     
-    if use_multitask and 'yowo_v2_' in args.version:
-        # Multi-task architecture for Action Genome + Charades
+    if use_multitask:
+        # Multi-task model for Action Genome
         num_objects = d_cfg.get('num_objects', 36)
         num_actions = d_cfg.get('num_actions', 157)
         num_relations = d_cfg.get('num_relations', 26)
+        total_classes = num_objects + num_actions + num_relations
         
         model, criterion = build_yowo_multitask(
             args=args,
             d_cfg=d_cfg,
             m_cfg=m_cfg,
             device=device,
+            num_classes=total_classes,
             num_objects=num_objects,
             num_actions=num_actions,
             num_relations=num_relations,
             trainable=trainable,
             resume=resume
         )
-    elif 'yowo_v2_' in args.version:
-        # Original single-head architecture
+    else:
+        # Original YOWO for standard datasets
         model, criterion = build_yowo(
             args=args,
             d_cfg=d_cfg,
@@ -51,8 +56,5 @@ def build_model(args,
             trainable=trainable,
             resume=resume
         )
-    else:
-        raise ValueError(f"Unknown model version: {args.version}")
 
     return model, criterion
-

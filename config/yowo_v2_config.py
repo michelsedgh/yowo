@@ -102,9 +102,10 @@ yowo_v2_config = {
     },
 
     # =========================================================================
-    # X3D Backbone Configurations
-    # X3D is more accurate than ShuffleNet for temporal modeling while still
-    # being efficient. All X3D variants output 192 channels.
+    # X3D Backbone Configurations (4-POOL TEMPORAL ARCHITECTURE)
+    # X3D with 4-pool: Pools 16 frames into 4 temporal segments (early,
+    # early_mid, late_mid, late) and concatenates to 768 channels (4 × 192).
+    # This preserves temporal order for transitional actions.
     # =========================================================================
     
     'yowo_v2_x3d_s': {
@@ -231,6 +232,58 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
+    },
+
+    # =========================================================================
+    # CLEAN Multi-Task Configurations (Minimal, Proven Architecture)
+    # Use these for reliable training with YOLO11 + ResNeXt/ShuffleNet
+    # =========================================================================
+    
+    # YOLO11m + ResNeXt101 - High capacity, good for Action Genome
+    'yowo_v2_resnext_yolo11m_multitask': {
+        # backbone
+        ## 2D - YOLO11m
+        'backbone_2d': 'yolo11m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ResNeXt101 (original YOWO backbone)
+        'backbone_3d': 'resnext101',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head - larger dim for ResNeXt's 2048 features
+        'head_dim': 256,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+        'clean': True,  # Use clean implementation
+    },
+
+    # YOLO11m + ShuffleNetV2 - Faster, lighter
+    'yowo_v2_shufflenet_yolo11m_multitask': {
+        # backbone
+        ## 2D - YOLO11m
+        'backbone_2d': 'yolo11m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ShuffleNetV2 (faster)
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '2.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+        'clean': True,
     },
 
 }

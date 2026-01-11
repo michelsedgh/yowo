@@ -151,6 +151,22 @@ class CrossAttentionMonitor:
         else:
             metrics['act_head_grad'] = 0.0
         
+        # X3D temporal conv gradients (learned dual-pathway)
+        if hasattr(model, 'backbone_3d'):
+            x3d = model.backbone_3d
+            # Check recent pathway
+            if hasattr(x3d, 'temporal_recent'):
+                for layer in x3d.temporal_recent:
+                    if hasattr(layer, 'weight') and layer.weight.grad is not None:
+                        metrics['x3d_recent_grad'] = layer.weight.grad.abs().mean().item()
+                        break
+            # Check full pathway
+            if hasattr(x3d, 'temporal_full'):
+                for layer in x3d.temporal_full:
+                    if hasattr(layer, 'weight') and layer.weight.grad is not None:
+                        metrics['x3d_full_grad'] = layer.weight.grad.abs().mean().item()
+                        break
+        
         return metrics
     
     def log_step(self, video_clips: torch.Tensor, targets: List, 
@@ -205,20 +221,16 @@ class CrossAttentionMonitor:
         if hasattr(model, 'action_object_cooc'):
             cooc_scale = model.action_object_cooc.cooc_scale.item()
         
-        # X3D temporal pathway weights (dual-pathway architecture)
+        # X3D temporal pathway info (learned dual-pathway architecture)
         temporal_weights = "N/A"
         pathway_info = ""
-        if hasattr(model, 'backbone_3d') and hasattr(model.backbone_3d, 'backbone'):
-            x3d = model.backbone_3d.backbone
-            # New dual-pathway architecture
-            if hasattr(x3d, 'get_pathway_weights'):
-                pw = x3d.get_pathway_weights()
-                temporal_weights = f"Attn={pw['attention_weight']:.2f}/Max={pw['max_weight']:.2f}"
-                pathway_info = f"  🔀 Attn scales: {[f'{w:.2f}' for w in pw['attention_scales']]} | Max scales: {[f'{w:.2f}' for w in pw['max_scales']]}"
-            # Old single-pathway architecture (backward compat)
-            elif hasattr(x3d, 'scale_weights'):
-                sw = F.softmax(x3d.scale_weights, dim=0)
-                temporal_weights = f"recent={sw[0]:.2f}/mid={sw[1]:.2f}/overall={sw[2]:.2f}"
+        if hasattr(model, 'backbone_3d'):
+            x3d = model.backbone_3d
+            # New learned dual-pathway architecture
+            if hasattr(x3d, 'get_temporal_info'):
+                info = x3d.get_temporal_info()
+                temporal_weights = f"Recent({info['recent_pathway_frames']}f)→{info['recent_channels']}ch + Full({info['full_pathway_frames']}f)→{info['full_channels']}ch"
+                pathway_info = f"  🔀 Temporal params: {info['total_params']:,} (learned)"
         
         # Print compact, useful log
         print(f"\n[Context Monitor] Epoch {epoch+1}, Iter {iter_i}")
