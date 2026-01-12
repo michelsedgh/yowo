@@ -1,7 +1,7 @@
 """
 Cross-Attention Monitor for YOWO Multi-Task Training
 
-Monitors the GlobalSceneContext and ObjectContextModule to verify
+Monitors the ObjectContext and RelationContext modules to verify
 that object and relation context is being learned for action detection.
 
 Key Metrics:
@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 
 class CrossAttentionMonitor:
     """
-    Monitors GlobalSceneContext and ObjectContextModule during training.
+    Monitors ObjectContext and RelationContext modules during training.
     """
     
     def __init__(self, model, log_dir: str, log_interval: int = 100, device: str = 'cpu'):

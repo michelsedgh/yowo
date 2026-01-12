@@ -5,7 +5,7 @@ This module logs attention patterns during training to verify:
 1. Attention entropy (uniform vs focused) - should DECREASE over training
 2. Nearby vs far attention ratio - should INCREASE over training  
 3. Person-to-object attention - should be HIGHER than background
-4. Position encoding scale - tracks the learned pos_scale value
+4. Temperature scale - tracks the learned attention temperature
 
 Usage:
     from utils.attention_logger import AttentionLogger

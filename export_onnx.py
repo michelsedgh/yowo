@@ -58,9 +58,10 @@ class YOWOMultiTaskONNX(nn.Module):
         self.num_actions = model.num_actions
         self.num_relations = model.num_relations
         
-        # Register pixel mean/std as buffers
-        self.register_buffer('pixel_mean', model.pixel_mean)
-        self.register_buffer('pixel_std', model.pixel_std)
+        # Register ImageNet pixel mean/std as buffers for X3D normalization
+        # X3D uses ImageNet normalization: mean=[0.45, 0.45, 0.45], std=[0.225, 0.225, 0.225]
+        self.register_buffer('pixel_mean', torch.tensor([0.45, 0.45, 0.45]).view(1, 3, 1, 1, 1))
+        self.register_buffer('pixel_std', torch.tensor([0.225, 0.225, 0.225]).view(1, 3, 1, 1, 1))
     
     def generate_anchors(self, fmp_size, stride, device):
         """Generate anchor points for a given feature map size."""
@@ -128,16 +129,12 @@ class YOWOMultiTaskONNX(nn.Module):
             obj_pred = self.model.obj_preds[level](cls_feat)
             
             # Step 2: Relation prediction (with object context)
-            rel_feat = self.model.obj_cross_attn[level](cls_feat, obj_pred)
+            rel_feat = self.model.obj_context[level](cls_feat, obj_pred)
             rel_pred = self.model.rel_preds[level](rel_feat)
             
             # Step 3: Action prediction (with object+relation context)
-            act_feat = self.model.obj_rel_cross_attn[level](cls_feat, obj_pred, rel_pred)
+            act_feat = self.model.rel_context[level](rel_feat, obj_pred, rel_pred)
             act_pred = self.model.act_preds[level](act_feat)
-            
-            # Step 4: Apply action-object co-occurrence
-            obj_probs = F.softmax(obj_pred, dim=1)
-            act_pred = self.model.action_object_cooc(act_pred, obj_probs)
             
             # Box prediction
             reg_pred = self.model.reg_preds[level](reg_feat)
