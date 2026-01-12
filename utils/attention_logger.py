@@ -78,18 +78,18 @@ class AttentionLogger:
         """Compute various attention statistics."""
         stats = {}
         
-        # Get the scene context attention modules
-        if hasattr(model, 'obj_rel_cross_attn'):
-            attn_modules = model.obj_rel_cross_attn
+        # Get the relation context modules
+        if hasattr(model, 'rel_context'):
+            attn_modules = model.rel_context
             
-            # Get pos_scale values
-            pos_scales = []
+            # Get temperature values (attention scaling)
+            temperatures = []
             for module in attn_modules:
-                if hasattr(module, 'pos_scale'):
-                    pos_scales.append(module.pos_scale.item())
+                if hasattr(module, 'temperature'):
+                    temperatures.append(module.temperature.item())
             
-            if pos_scales:
-                stats['pos_scale'] = np.mean(pos_scales)
+            if temperatures:
+                stats['attn_temperature'] = np.mean(temperatures)
         
         # Analyze output predictions for attention quality indicators
         # Higher confidence at positions with strong predictions = good attention
@@ -198,54 +198,32 @@ class AttentionLogger:
                 obj_pred = model.obj_preds[level](cls_feat)
                 
                 # Get relation features and predictions
-                rel_feat = model.obj_cross_attn[level](cls_feat, obj_pred)
+                rel_feat = model.obj_context[level](cls_feat, obj_pred)
                 rel_pred = model.rel_preds[level](rel_feat)
                 
-                # Get attention weights from scene context
-                _, attn_weights = model.obj_rel_cross_attn[level](
-                    cls_feat, obj_pred, rel_pred, return_weights=True
-                )
+                # Get action features from relation context
+                act_feat = model.rel_context[level](rel_feat, obj_pred, rel_pred)
                 
-                B, N, _ = attn_weights.shape
-                H = W = int(np.sqrt(N))
+                # Compute feature-based statistics instead of attention weights
+                # (actual attention weights are internal to the context modules)
+                B, C, H, W = cls_feat.shape
+                N = H * W
                 
-                # Compute entropy (lower = more focused)
-                entropy = -(attn_weights * torch.log(attn_weights + 1e-10)).sum(dim=-1).mean().item()
-                max_entropy = np.log(N)
-                normalized_entropy = entropy / max_entropy
-                stats['attention_entropy'].append(normalized_entropy)
+                # Compute context contribution (how much features change through context)
+                feature_change = (act_feat - rel_feat).abs().mean().item()
+                feat_magnitude = rel_feat.abs().mean().item() + 1e-10
+                context_contribution = feature_change / feat_magnitude
+                stats['attention_entropy'].append(context_contribution)  # Repurpose as context strength
                 
-                # Compute nearby vs far ratio
-                # For each position, compare attention to neighbors vs far positions
-                nearby_attn = []
-                far_attn = []
+                # Compute spatial variance in predictions (proxy for attention focus)
+                obj_probs = F.softmax(obj_pred, dim=1)
+                spatial_var = obj_probs.var(dim=(2, 3)).mean().item()
+                stats['nearby_vs_far_ratio'].append(spatial_var * 100)  # Scale up for visibility
                 
-                for i in range(min(10, N)):  # Sample 10 positions
-                    y, x = i // W, i % W
-                    
-                    # Nearby positions (within 2 pixels)
-                    nearby_mask = torch.zeros(N, device=attn_weights.device)
-                    for dy in range(-2, 3):
-                        for dx in range(-2, 3):
-                            ny, nx = y + dy, x + dx
-                            if 0 <= ny < H and 0 <= nx < W:
-                                nearby_mask[ny * W + nx] = 1
-                    
-                    # Far positions
-                    far_mask = 1 - nearby_mask
-                    
-                    if nearby_mask.sum() > 0 and far_mask.sum() > 0:
-                        nearby_attn.append((attn_weights[0, i] * nearby_mask).sum().item() / nearby_mask.sum().item())
-                        far_attn.append((attn_weights[0, i] * far_mask).sum().item() / far_mask.sum().item())
-                
-                if nearby_attn and far_attn:
-                    ratio = np.mean(nearby_attn) / (np.mean(far_attn) + 1e-10)
-                    stats['nearby_vs_far_ratio'].append(ratio)
-                
-                # Check if attention is near-uniform
-                uniform_val = 1.0 / N
-                is_uniform = (attn_weights.std(dim=-1) < uniform_val).float().mean().item()
-                stats['uniform_attention_pct'].append(is_uniform)
+                # Check prediction confidence distribution
+                rel_probs = torch.sigmoid(rel_pred)
+                low_conf_pct = (rel_probs.max(dim=1)[0] < 0.5).float().mean().item()
+                stats['uniform_attention_pct'].append(low_conf_pct)
             
             # Average across levels
             for k in list(stats.keys()):
@@ -258,11 +236,11 @@ class AttentionLogger:
         
         # Log
         print(f"\n[Detailed Attention Analysis - Epoch {epoch+1}, Iter {iter_i}]")
-        print(f"  Attention entropy (normalized): {stats.get('attention_entropy', 'N/A'):.4f}")
-        print(f"    (0 = focused on single position, 1 = uniform)")
-        print(f"  Nearby vs Far ratio: {stats.get('nearby_vs_far_ratio', 'N/A'):.4f}")
-        print(f"    (>1 means attending more to nearby positions)")
-        print(f"  Uniform attention %: {stats.get('uniform_attention_pct', 'N/A')*100:.1f}%")
+        print(f"  Context contribution: {stats.get('attention_entropy', 'N/A'):.4f}")
+        print(f"    (Higher = more context influence)")
+        print(f"  Spatial variance: {stats.get('nearby_vs_far_ratio', 'N/A'):.4f}")
+        print(f"    (Higher = more spatially focused predictions)")
+        print(f"  Low confidence %: {stats.get('uniform_attention_pct', 'N/A')*100:.1f}%")
         print(f"    (Should DECREASE during training)")
         print()
         
@@ -312,7 +290,7 @@ def create_attention_monitor_hook(log_dir):
     
     Usage:
         hook = create_attention_monitor_hook(log_dir)
-        for module in model.obj_rel_cross_attn:
+        for module in model.rel_context:
             module.register_forward_hook(hook)
     """
     stats = {'count': 0, 'entropy_sum': 0}
@@ -327,10 +305,9 @@ def create_attention_monitor_hook(log_dir):
         
         stats['count'] += 1
         
-        # We can't easily get attention weights without modifying the forward pass
-        # This hook is mainly for tracking pos_scale
-        if hasattr(module, 'pos_scale'):
-            pos_scale = module.pos_scale.item()
-            print(f"[Attn Hook] pos_scale: {pos_scale:.4f}")
+        # Track temperature (attention scaling)
+        if hasattr(module, 'temperature'):
+            temperature = module.temperature.item()
+            print(f"[Attn Hook] temperature: {temperature:.4f}")
     
     return hook

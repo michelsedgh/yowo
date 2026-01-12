@@ -86,13 +86,13 @@ class CrossAttentionMonitor:
             obj_pred = model.obj_preds[level](cls_feat)
             obj_probs = F.softmax(obj_pred, dim=1)
             
-            # Relation prediction
-            rel_feat = model.obj_cross_attn[level](cls_feat, obj_pred)
+            # Relation prediction (uses obj_context for Object→Relation)
+            rel_feat = model.obj_context[level](cls_feat, obj_pred)
             rel_pred = model.rel_preds[level](rel_feat)
             rel_probs = torch.sigmoid(rel_pred)
             
-            # Action features with context
-            act_feat = model.obj_rel_cross_attn[level](cls_feat, obj_pred, rel_pred)
+            # Action features with context (uses rel_context for Relation→Action)
+            act_feat = model.rel_context[level](rel_feat, obj_pred, rel_pred)
             
             metrics = {}
             
@@ -110,9 +110,9 @@ class CrossAttentionMonitor:
             feat_magnitude = cls_feat.abs().mean().clamp(min=0.01)
             metrics['context_contribution'] = (feature_change / feat_magnitude).item()
             
-            # 5. Context scale (learnable parameter in GlobalSceneContext)
-            if hasattr(model.obj_rel_cross_attn[level], 'context_scale'):
-                metrics['context_scale'] = model.obj_rel_cross_attn[level].context_scale.item()
+            # 5. Context scale (learnable parameter - check temperature)
+            if hasattr(model.rel_context[level], 'temperature'):
+                metrics['context_scale'] = model.rel_context[level].temperature.item()
             
             return metrics
             
@@ -125,21 +125,21 @@ class CrossAttentionMonitor:
         model = self._get_model()
         metrics = {}
         
-        # GlobalSceneContext (obj_rel_cross_attn) - check context_proj
-        if hasattr(model, 'obj_rel_cross_attn'):
-            sca = model.obj_rel_cross_attn[level]
-            if hasattr(sca, 'context_proj'):
-                layer = sca.context_proj[0]  # First conv/linear in the projection
+        # RelationContext (rel_context) - check out_proj
+        if hasattr(model, 'rel_context'):
+            sca = model.rel_context[level]
+            if hasattr(sca, 'out_proj'):
+                layer = sca.out_proj
                 if layer.weight.grad is not None:
                     metrics['scene_ctx_grad'] = layer.weight.grad.abs().mean().item()
                 else:
                     metrics['scene_ctx_grad'] = 0.0
         
-        # ObjectContextModule (obj_cross_attn) - check context_proj
-        if hasattr(model, 'obj_cross_attn'):
-            ocm = model.obj_cross_attn[level]
-            if hasattr(ocm, 'context_proj'):
-                layer = ocm.context_proj[0]
+        # ObjectContext (obj_context) - check out_proj
+        if hasattr(model, 'obj_context'):
+            ocm = model.obj_context[level]
+            if hasattr(ocm, 'out_proj'):
+                layer = ocm.out_proj
                 if layer.weight.grad is not None:
                     metrics['obj_ctx_grad'] = layer.weight.grad.abs().mean().item()
                 else:
@@ -217,9 +217,7 @@ class CrossAttentionMonitor:
         
         # Get additional model metrics
         model = self._get_model()
-        cooc_scale = 0.1
-        if hasattr(model, 'action_object_cooc'):
-            cooc_scale = model.action_object_cooc.cooc_scale.item()
+        cooc_scale = 0.1  # Default value (action_object_cooc not used in current model)
         
         # X3D temporal pathway info (learned dual-pathway architecture)
         temporal_weights = "N/A"
