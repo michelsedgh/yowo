@@ -121,8 +121,53 @@ def build_dataset(d_cfg, args, is_train=False):
             save_path='./evaluator/eval_results/'
         )
 
+    elif args.dataset == 'smart_home':
+        # Smart Home dataset - filtered Charades-AG with 42 actions
+        from dataset.smart_home import SmartHomeDataset
+        from evaluator.smart_home_evaluator import SmartHomeEvaluator
+        import json
+        
+        data_dir = os.path.join(args.root, 'ActionGenome')
+        
+        # Load smart home config for class weights
+        config_path = os.path.join(os.path.dirname(__file__), '../config/smart_home_final.json')
+        with open(config_path) as f:
+            smart_home_config = json.load(f)
+        
+        # dataset
+        dataset = SmartHomeDataset(
+            cfg=d_cfg,
+            data_root=data_dir,
+            is_train=is_train,
+            img_size=d_cfg['train_size'],
+            transform=augmentation,
+            len_clip=args.len_clip,
+            sampling_rate=d_cfg['sampling_rate']
+        )
+        # 36 objects + 42 actions + 26 relations = 104
+        num_classes = 104
+        
+        # Store config in args for loss function to use
+        args.smart_home_config = smart_home_config
+        
+        # evaluator
+        evaluator = SmartHomeEvaluator(
+            d_cfg=d_cfg,
+            data_root=args.root,
+            img_size=d_cfg['test_size'],
+            len_clip=args.len_clip,
+            sampling_rate=d_cfg['sampling_rate'],
+            batch_size=args.test_batch_size,
+            transform=basetransform,
+            collate_fn=CollateFunc(),
+            conf_thresh=args.conf_thresh,
+            iou_thresh=args.nms_thresh,
+            save_path='./evaluator/eval_results/',
+            smart_home_config=smart_home_config
+        )
+
     else:
-        print('unknow dataset !! Only support ucf24 & jhmdb21 & ava_v2.2 !!')
+        print('unknow dataset !! Only support ucf24 & jhmdb21 & ava_v2.2 & charades_ag & smart_home !!')
         exit(0)
 
     print('==============================')

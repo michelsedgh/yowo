@@ -23,7 +23,8 @@ class MultiTaskCriterion(object):
     """
     
     def __init__(self, args, img_size, num_classes=219, 
-                 num_objects=36, num_actions=157, num_relations=26):
+                 num_objects=36, num_actions=157, num_relations=26,
+                 action_class_weights=None):
         self.img_size = img_size
         self.num_classes = num_classes
         self.num_objects = num_objects
@@ -33,6 +34,13 @@ class MultiTaskCriterion(object):
         self.loss_conf_weight = args.loss_conf_weight
         self.loss_cls_weight = args.loss_cls_weight
         self.loss_reg_weight = args.loss_reg_weight
+        
+        # Action class weights for imbalanced data (optional)
+        # Shape: [num_actions] - higher weight for rare classes
+        if action_class_weights is not None:
+            self.action_class_weights = torch.tensor(action_class_weights, dtype=torch.float32)
+        else:
+            self.action_class_weights = None
         
         # Loss functions
         self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
@@ -150,10 +158,14 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (BCE)
+        # Action loss (BCE) - with optional class weights
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0:
-            loss_act = self.act_lossf(matched_act_preds, act_targets)
+            loss_act = self.act_lossf(matched_act_preds, act_targets)  # [N, num_actions]
+            # Apply class weights if provided
+            if self.action_class_weights is not None:
+                weights = self.action_class_weights.to(device)
+                loss_act = loss_act * weights  # broadcast: [N, num_actions] * [num_actions]
             loss_act = loss_act.sum() / num_fg
         else:
             loss_act = torch.tensor(0.0, device=device)
@@ -194,6 +206,9 @@ class MultiTaskCriterion(object):
 
 
 def build_multitask_criterion(args, img_size, num_classes=219,
-                               num_objects=36, num_actions=157, num_relations=26):
+                               num_objects=36, num_actions=157, num_relations=26,
+                               action_class_weights=None):
     return MultiTaskCriterion(args, img_size, num_classes, 
-                               num_objects, num_actions, num_relations)
+                               num_objects, num_actions, num_relations,
+                               action_class_weights=action_class_weights)
+

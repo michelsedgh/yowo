@@ -41,15 +41,24 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
     
     # Build criterion
     if trainable:
+        # Check for smart_home class weights
+        action_class_weights = None
+        if hasattr(args, 'smart_home_config') and args.smart_home_config is not None:
+            action_class_weights = args.smart_home_config.get('action_class_weights', None)
+            if action_class_weights is not None:
+                print(f"  Using class weights: [{min(action_class_weights):.2f}, {max(action_class_weights):.2f}]")
+        
         criterion = build_multitask_criterion(
             args=args,
             img_size=d_cfg['train_size'],
             num_classes=num_classes,
             num_objects=num_objects,
             num_actions=num_actions,
-            num_relations=num_relations
+            num_relations=num_relations,
+            action_class_weights=action_class_weights
         )
     else:
         criterion = None
     
     return model, criterion
+

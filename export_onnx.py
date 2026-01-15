@@ -2,7 +2,8 @@
 """
 YOWO Multi-Task ONNX Export Script
 
-Exports the YOWO multi-task model (X3D-M + YOLO11m) to ONNX format for TensorRT optimization.
+Exports the YOWO multi-task model to ONNX format for TensorRT optimization.
+Supports both X3D and ResNeXt 3D backbones.
 
 Architecture:
 - Input: [B=1, C=3, T=16, H=224, W=224] video clip
@@ -20,7 +21,11 @@ Key design choices:
 3. Use fixed input shape for TensorRT optimization
 
 Usage:
-    python export_onnx.py --weight yowo_v2_x3d_m_yolo11m_multitask_epoch_14.pth
+    # For ResNeXt + YOLO11m multitask:
+    python export_onnx.py --weight yowo_v2_resnext_yolo11m_multitask_epoch_1.pth --version yowo_v2_resnext_yolo11m_multitask
+    
+    # For X3D + YOLO11m multitask:
+    python export_onnx.py --weight yowo_v2_x3d_m_yolo11m_multitask_epoch_14.pth --version yowo_v2_x3d_m_yolo11m_multitask
 """
 
 import argparse
@@ -47,9 +52,13 @@ class YOWOMultiTaskONNX(nn.Module):
     2. Flattens all scale outputs into single tensor
     3. Includes box decoding and normalization
     4. Fixed batch size = 1 for optimal TensorRT optimization
+    
+    Supports both X3D and ResNeXt 3D backbones:
+    - X3D: Requires ImageNet normalization (mean=[0.45], std=[0.225])
+    - ResNeXt: Expects raw [0,1] normalized input (no extra normalization)
     """
     
-    def __init__(self, model: YOWOMultiTask, img_size: int = 224):
+    def __init__(self, model: YOWOMultiTask, img_size: int = 224, backbone_3d_type: str = 'resnext'):
         super().__init__()
         self.model = model
         self.img_size = img_size
@@ -57,11 +66,19 @@ class YOWOMultiTaskONNX(nn.Module):
         self.num_objects = model.num_objects
         self.num_actions = model.num_actions
         self.num_relations = model.num_relations
+        self.backbone_3d_type = backbone_3d_type
         
-        # Register ImageNet pixel mean/std as buffers for X3D normalization
         # X3D uses ImageNet normalization: mean=[0.45, 0.45, 0.45], std=[0.225, 0.225, 0.225]
-        self.register_buffer('pixel_mean', torch.tensor([0.45, 0.45, 0.45]).view(1, 3, 1, 1, 1))
-        self.register_buffer('pixel_std', torch.tensor([0.225, 0.225, 0.225]).view(1, 3, 1, 1, 1))
+        # ResNeXt expects raw [0,1] input - no extra normalization needed
+        if 'x3d' in backbone_3d_type.lower():
+            self.register_buffer('pixel_mean', torch.tensor([0.45, 0.45, 0.45]).view(1, 3, 1, 1, 1))
+            self.register_buffer('pixel_std', torch.tensor([0.225, 0.225, 0.225]).view(1, 3, 1, 1, 1))
+            self.needs_normalization = True
+        else:
+            # ResNeXt/ShuffleNet - no extra normalization
+            self.register_buffer('pixel_mean', torch.zeros(1, 3, 1, 1, 1))
+            self.register_buffer('pixel_std', torch.ones(1, 3, 1, 1, 1))
+            self.needs_normalization = False
     
     def generate_anchors(self, fmp_size, stride, device):
         """Generate anchor points for a given feature map size."""
@@ -100,8 +117,12 @@ class YOWOMultiTaskONNX(nn.Module):
         # Extract key frame for 2D backbone
         key_frame = video_clips[:, :, -1, :, :]
         
-        # Normalize video for 3D backbone (X3D uses ImageNet norm)
-        video_clips_3d = (video_clips - self.pixel_mean) / self.pixel_std
+        # Normalize video for 3D backbone if needed (X3D uses ImageNet norm)
+        # ResNeXt expects raw [0,1] input - same as training
+        if self.needs_normalization:
+            video_clips_3d = (video_clips - self.pixel_mean) / self.pixel_std
+        else:
+            video_clips_3d = video_clips
         
         # 3D backbone
         feat_3d = self.model.backbone_3d(video_clips_3d)
@@ -188,8 +209,8 @@ def export_onnx(args):
     
     # Create a minimal args namespace for config building
     class Args:
-        def __init__(self):
-            self.version = 'yowo_v2_x3d_m_yolo11m_multitask'
+        def __init__(self, version):
+            self.version = version
             self.dataset = 'charades_ag'
             self.img_size = 224
             self.len_clip = 16
@@ -199,7 +220,7 @@ def export_onnx(args):
             self.freeze_backbone_2d = False
             self.freeze_backbone_3d = False
     
-    model_args = Args()
+    model_args = Args(args.version)
     
     # Build configs
     from config import build_dataset_config, build_model_config
@@ -250,8 +271,12 @@ def export_onnx(args):
     
     print(f"  Loaded {len(filtered_state)}/{len(model_state)} parameters")
     
-    # Create ONNX wrapper
-    onnx_model = YOWOMultiTaskONNX(model, img_size=args.img_size)
+    # Determine backbone type from config
+    backbone_3d_type = m_cfg.get('backbone_3d', 'resnext101')
+    print(f"  3D Backbone: {backbone_3d_type}")
+    
+    # Create ONNX wrapper with correct backbone type
+    onnx_model = YOWOMultiTaskONNX(model, img_size=args.img_size, backbone_3d_type=backbone_3d_type)
     onnx_model.to(device)
     onnx_model.eval()
     
@@ -325,6 +350,14 @@ def main():
     parser = argparse.ArgumentParser(description='YOWO Multi-Task ONNX Export')
     parser.add_argument('--weight', type=str, required=True,
                         help='Path to trained weight file (.pth)')
+    parser.add_argument('--version', type=str, default='yowo_v2_resnext_yolo11m_multitask',
+                        choices=[
+                            'yowo_v2_resnext_yolo11m_multitask',
+                            'yowo_v2_shufflenet_yolo11m_multitask',
+                            'yowo_v2_x3d_m_yolo11m_multitask',
+                            'yowo_v2_x3d_s_yolo11m_multitask',
+                        ],
+                        help='Model version (must match training config)')
     parser.add_argument('--output', type=str, default='yowo_multitask.onnx',
                         help='Output ONNX file path')
     parser.add_argument('--img_size', type=int, default=224,
@@ -333,6 +366,10 @@ def main():
                         help='Clip length (number of frames)')
     
     args = parser.parse_args()
+    
+    # Auto-generate output name if not specified
+    if args.output == 'yowo_multitask.onnx':
+        args.output = f'{args.version}.onnx'
     
     export_onnx(args)
 

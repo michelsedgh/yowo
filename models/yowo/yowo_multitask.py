@@ -176,8 +176,11 @@ class RelationContext(nn.Module):
         # Weighted context
         context = torch.bmm(attn, V).permute(0, 2, 1).view(B, C // 2, H, W)
         
-        # Gate by person presence (actions only matter where person is)
-        context = context * person_prob
+        # Soft gate by person presence
+        # Ensures at least 30% context flows (for pure motion actions)
+        # While person regions get full context bonus
+        soft_gate = 0.3 + 0.7 * person_prob  # Range: [0.3, 1.0]
+        context = context * soft_gate
         
         # Project and add RESIDUAL
         out = self.out_proj(context)
