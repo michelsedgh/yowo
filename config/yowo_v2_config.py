@@ -286,4 +286,75 @@ yowo_v2_config = {
         'clean': True,
     },
 
+    # =========================================================================
+    # YOLO26 Configurations - Latest YOLO with NMS-free native design
+    # =========================================================================
+    
+    # YOLO26L + ResNeXt101 - High capacity, state-of-the-art 2D features
+    'yowo_v2_resnext_yolo26l_multitask': {
+        # backbone
+        ## 2D - YOLO26L (latest, improved small object detection)
+        'backbone_2d': 'yolo26l',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ResNeXt101 (proven temporal backbone)
+        'backbone_3d': 'resnext101',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head - larger dim for ResNeXt's 2048 features
+        'head_dim': 256,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
+    # YOLO26M + ResNeXt101 - Medium variant, faster
+    'yowo_v2_resnext_yolo26m_multitask': {
+        # backbone
+        ## 2D - YOLO26M (balanced)
+        'backbone_2d': 'yolo26m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ResNeXt101
+        'backbone_3d': 'resnext101',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 256,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
+    # YOLO26L + ShuffleNetV2 - Fast inference with strong 2D features
+    'yowo_v2_shufflenet_yolo26l_multitask': {
+        # backbone
+        ## 2D - YOLO26L
+        'backbone_2d': 'yolo26l',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ShuffleNetV2 (faster)
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '2.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'BN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
 }

@@ -9,9 +9,12 @@ from .loss_multitask import build_multitask_criterion
 
 def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
                           num_objects=36, num_actions=157, num_relations=26,
-                          trainable=False, resume=None):
+                          trainable=False, resume=None, end2end=False):
     """
     Build YOWOMultiTask model and criterion.
+    
+    Args:
+        end2end: Enable dual-head NMS-free mode (default: False)
     """
     print("="*30)
     print("Building YOWOMultiTask")
@@ -19,6 +22,7 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
     print(f"  Actions: {num_actions}")
     print(f"  Relations: {num_relations}")
     print(f"  Total classes: {num_classes}")
+    print(f"  End-to-End NMS-Free: {end2end}")
     print("="*30)
     
     model = YOWOMultiTask(
@@ -30,7 +34,8 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
         conf_thresh=args.conf_thresh,
         nms_thresh=args.nms_thresh,
         topk=args.topk,
-        trainable=trainable
+        trainable=trainable,
+        end2end=end2end  # NEW: Enable dual-head NMS-free mode
     )
     
     # Load checkpoint if provided

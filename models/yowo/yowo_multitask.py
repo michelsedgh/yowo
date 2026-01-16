@@ -14,6 +14,7 @@ Example: "Person typing on laptop"
   - Action: "typing" (confident because holding + looking_at laptop)
 """
 
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -198,6 +199,8 @@ class YOWOMultiTask(nn.Module):
     4. Relation Head: predict 26 relation classes  
     5. RelationContext: enrich features with relation info
     6. Action Head: predict 157 action classes
+    
+    NEW: end2end mode enables dual-head for NMS-free inference.
     """
     
     def __init__(self, 
@@ -209,7 +212,8 @@ class YOWOMultiTask(nn.Module):
                  conf_thresh=0.05,
                  nms_thresh=0.6,
                  topk=50,
-                 trainable=False):
+                 trainable=False,
+                 end2end=False):  # NEW: Enable dual-head NMS-free mode
         super(YOWOMultiTask, self).__init__()
         self.cfg = cfg
         self.device = device
@@ -222,6 +226,7 @@ class YOWOMultiTask(nn.Module):
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
         self.topk = topk
+        self.end2end = end2end  # NMS-free mode
 
         # ==================== BACKBONE ====================
         self.backbone_2d, bk_dim_2d = build_backbone_2d(
@@ -285,6 +290,18 @@ class YOWOMultiTask(nn.Module):
             [nn.Conv2d(head_dim, 4, kernel_size=1) 
                 for _ in range(len(cfg['stride']))])
 
+        # ==================== ONE-TO-ONE HEADS (NMS-FREE) ====================
+        # Duplicate heads for O2O - trained with topk=1 matcher
+        if self.end2end:
+            self.o2o_conf_preds = copy.deepcopy(self.conf_preds)
+            self.o2o_obj_preds = copy.deepcopy(self.obj_preds)
+            self.o2o_obj_context = copy.deepcopy(self.obj_context)
+            self.o2o_rel_preds = copy.deepcopy(self.rel_preds)
+            self.o2o_rel_context = copy.deepcopy(self.rel_context)
+            self.o2o_act_preds = copy.deepcopy(self.act_preds)
+            self.o2o_reg_preds = copy.deepcopy(self.reg_preds)
+            print("End-to-End NMS-Free Mode: ENABLED (dual O2M + O2O heads)")
+
         self.init_yowo()
 
 
@@ -320,8 +337,12 @@ class YOWOMultiTask(nn.Module):
         return torch.cat([pred_x1y1, pred_x2y2], dim=-1)
 
 
-    def _forward_single_level(self, level, cls_feat, reg_feat, feat_3d_up):
-        """Process single FPN level with full cascade."""
+    def _forward_single_level(self, level, cls_feat, reg_feat, feat_3d_up, use_o2o=False):
+        """Process single FPN level with full cascade.
+        
+        Args:
+            use_o2o: If True, use One-to-One heads (for NMS-free inference)
+        """
         # Encode
         cls_feat = self.cls_channel_encoders[level](cls_feat, feat_3d_up)
         reg_feat = self.reg_channel_encoders[level](reg_feat, feat_3d_up)
@@ -329,24 +350,42 @@ class YOWOMultiTask(nn.Module):
         # Head
         cls_feat, reg_feat = self.heads[level](cls_feat, reg_feat)
         
+        # Select prediction heads
+        if use_o2o and self.end2end:
+            conf_pred = self.o2o_conf_preds[level]
+            obj_pred = self.o2o_obj_preds[level]
+            obj_ctx = self.o2o_obj_context[level]
+            rel_pred = self.o2o_rel_preds[level]
+            rel_ctx = self.o2o_rel_context[level]
+            act_pred = self.o2o_act_preds[level]
+            reg_pred = self.o2o_reg_preds[level]
+        else:
+            conf_pred = self.conf_preds[level]
+            obj_pred = self.obj_preds[level]
+            obj_ctx = self.obj_context[level]
+            rel_pred = self.rel_preds[level]
+            rel_ctx = self.rel_context[level]
+            act_pred = self.act_preds[level]
+            reg_pred = self.reg_preds[level]
+        
         # ===== CASCADE: Object → Relation → Action =====
         
         # 1. Object prediction
-        obj_logits = self.obj_preds[level](cls_feat)
+        obj_logits = obj_pred(cls_feat)
         
         # 2. Relation prediction (with object context)
-        rel_feat = self.obj_context[level](cls_feat, obj_logits)
-        rel_logits = self.rel_preds[level](rel_feat)
+        rel_feat = obj_ctx(cls_feat, obj_logits)
+        rel_logits = rel_pred(rel_feat)
         
         # 3. Action prediction (with object + relation context)
-        act_feat = self.rel_context[level](rel_feat, obj_logits, rel_logits)
-        act_logits = self.act_preds[level](act_feat)
+        act_feat = rel_ctx(rel_feat, obj_logits, rel_logits)
+        act_logits = act_pred(act_feat)
         
         # Confidence and box
-        conf_logits = self.conf_preds[level](reg_feat)
-        reg_pred = self.reg_preds[level](reg_feat)
+        conf_logits = conf_pred(reg_feat)
+        reg_output = reg_pred(reg_feat)
         
-        return conf_logits, obj_logits, rel_logits, act_logits, reg_pred
+        return conf_logits, obj_logits, rel_logits, act_logits, reg_output
 
 
     def post_process(self, conf_preds, cls_preds, reg_preds, anchors):
@@ -400,11 +439,14 @@ class YOWOMultiTask(nn.Module):
         all_reg = []
         all_anchors = []
         
+        # Use O2O heads if end2end mode (NMS-free inference)
+        use_o2o = self.end2end
+        
         for level, (cls_f, reg_f) in enumerate(zip(cls_feats, reg_feats)):
             feat_3d_up = F.interpolate(feat_3d, scale_factor=2 ** (2 - level))
             
             conf_l, obj_l, rel_l, act_l, reg_l = \
-                self._forward_single_level(level, cls_f, reg_f, feat_3d_up)
+                self._forward_single_level(level, cls_f, reg_f, feat_3d_up, use_o2o=use_o2o)
             
             fmp_size = conf_l.shape[-2:]
             anchors = self.generate_anchors(fmp_size, self.stride[level])
@@ -431,17 +473,68 @@ class YOWOMultiTask(nn.Module):
         
         batch_bboxes = []
         for b in range(B):
-            out = self.post_process(
-                [c[b] for c in all_conf],
-                [c[b] for c in all_cls],
-                [r[b] for r in all_reg],
-                all_anchors
-            )
+            if self.end2end:
+                # NMS-FREE post-processing for O2O head
+                out = self.post_process_nms_free(
+                    [c[b] for c in all_conf],
+                    [c[b] for c in all_cls],
+                    [r[b] for r in all_reg],
+                    all_anchors
+                )
+            else:
+                # Standard post-processing with NMS
+                out = self.post_process(
+                    [c[b] for c in all_conf],
+                    [c[b] for c in all_cls],
+                    [r[b] for r in all_reg],
+                    all_anchors
+                )
             out[..., :4] /= max(img_h, img_w)
             out[..., :4] = np.clip(out[..., :4], 0., 1.)
             batch_bboxes.append(out)
         
         return batch_bboxes
+
+
+    def post_process_nms_free(self, conf_preds, cls_preds, reg_preds, anchors):
+        """NMS-free post-processing for O2O head.
+        
+        O2O head was trained to output single predictions per object,
+        so we just need confidence thresholding - NO NMS needed!
+        """
+        all_conf = []
+        all_cls = []
+        all_box = []
+        
+        for level, (conf_i, cls_i, reg_i, anc_i) in enumerate(
+            zip(conf_preds, cls_preds, reg_preds, anchors)):
+            
+            box_i = self.decode_boxes(anc_i, reg_i, self.stride[level])
+            conf_i = torch.sigmoid(conf_i.squeeze(-1))
+            
+            k = min(self.topk, conf_i.shape[0])
+            topk_conf, topk_idx = torch.topk(conf_i, k)
+            topk_cls = cls_i[topk_idx]
+            topk_box = box_i[topk_idx]
+            
+            keep = topk_conf > self.conf_thresh
+            all_conf.append(topk_conf[keep])
+            all_cls.append(topk_cls[keep])
+            all_box.append(topk_box[keep])
+        
+        conf = torch.cat(all_conf, dim=0)
+        cls = torch.cat(all_cls, dim=0)
+        box = torch.cat(all_box, dim=0)
+        
+        if len(conf) == 0:
+            return np.zeros((0, 5 + self.num_classes))
+        
+        # NO NMS! Just return the predictions directly
+        scores = conf.cpu().numpy()
+        labels = cls.cpu().numpy()
+        bboxes = box.cpu().numpy()
+        
+        return np.concatenate([bboxes, scores[..., None], labels], axis=-1)
 
 
     def forward(self, video_clips):
@@ -452,6 +545,29 @@ class YOWOMultiTask(nn.Module):
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         
+        # ========== ONE-TO-MANY (O2M) FORWARD ==========
+        o2m_outputs = self._forward_all_levels(cls_feats, reg_feats, feat_3d, use_o2o=False)
+        
+        if self.end2end:
+            # ========== ONE-TO-ONE (O2O) FORWARD ==========
+            # CRITICAL: Use DETACHED features to prevent gradient conflict!
+            cls_feats_detach = [f.detach() for f in cls_feats]
+            reg_feats_detach = [f.detach() for f in reg_feats]
+            feat_3d_detach = feat_3d.detach()
+            
+            o2o_outputs = self._forward_all_levels(
+                cls_feats_detach, reg_feats_detach, feat_3d_detach, use_o2o=True
+            )
+            
+            return {
+                "one2many": o2m_outputs,
+                "one2one": o2o_outputs,
+            }
+        
+        return o2m_outputs
+
+    def _forward_all_levels(self, cls_feats, reg_feats, feat_3d, use_o2o=False):
+        """Forward through all FPN levels."""
         all_conf = []
         all_obj = []
         all_rel = []
@@ -463,7 +579,7 @@ class YOWOMultiTask(nn.Module):
             feat_3d_up = F.interpolate(feat_3d, scale_factor=2 ** (2 - level))
             
             conf_l, obj_l, rel_l, act_l, reg_l = \
-                self._forward_single_level(level, cls_f, reg_f, feat_3d_up)
+                self._forward_single_level(level, cls_f, reg_f, feat_3d_up, use_o2o=use_o2o)
             
             fmp_size = conf_l.shape[-2:]
             anchors = self.generate_anchors(fmp_size, self.stride[level])

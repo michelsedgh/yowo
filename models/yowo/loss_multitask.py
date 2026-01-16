@@ -48,14 +48,46 @@ class MultiTaskCriterion(object):
         self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
         self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')
         
-        # Matcher
+        # One-to-Many Matcher (standard, topk>1 for rich supervision)
         self.matcher = SimOTA(
             num_classes=num_classes,
             center_sampling_radius=args.center_sampling_radius,
             topk_candidate=args.topk_candicate
         )
+        
+        # One-to-One Matcher (topk=1 for NMS-free)
+        self.matcher_o2o = SimOTA(
+            num_classes=num_classes,
+            center_sampling_radius=args.center_sampling_radius,
+            topk_candidate=1  # CRITICAL: topk=1 forces single anchor per object
+        )
 
     def __call__(self, outputs, targets):
+        # Check if dual-head (end2end) outputs
+        if 'one2many' in outputs:
+            # Dual-head mode: compute both losses
+            o2m_loss = self._compute_loss(outputs['one2many'], targets, self.matcher)
+            o2o_loss = self._compute_loss(outputs['one2one'], targets, self.matcher_o2o)
+            
+            # Combine losses (equal weighting like ultralytics)
+            combined = {}
+            for key in o2m_loss:
+                if key == 'losses':
+                    combined[key] = o2m_loss[key] + o2o_loss[key]
+                else:
+                    combined[key] = o2m_loss[key] + o2o_loss[key]
+            
+            # Add per-branch losses for monitoring
+            combined['o2m_losses'] = o2m_loss['losses']
+            combined['o2o_losses'] = o2o_loss['losses']
+            
+            return combined
+        else:
+            # Single-head mode (backward compatible)
+            return self._compute_loss(outputs, targets, self.matcher)
+
+    def _compute_loss(self, outputs, targets, matcher):
+        """Compute loss for a single head (O2M or O2O)."""
         bs = outputs['pred_obj'][0].shape[0]
         device = outputs['pred_obj'][0].device
         fpn_strides = outputs['strides']
@@ -99,7 +131,7 @@ class MultiTaskCriterion(object):
                     pred_ious,
                     matched_gt_inds,
                     num_fg,
-                ) = self.matcher(
+                ) = matcher(  # Use passed matcher (O2M or O2O)
                     fpn_strides=fpn_strides,
                     anchors=anchors,
                     pred_conf=conf_preds[batch_idx],
