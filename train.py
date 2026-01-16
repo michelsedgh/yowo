@@ -18,19 +18,7 @@ from utils.misc import CollateFunc, build_dataset, build_dataloader
 from utils.solver.optimizer import build_optimizer
 from utils.solver.warmup_schedule import build_warmup
 
-# Attention logging for multi-task models
-try:
-    from utils.attention_logger import AttentionLogger
-    ATTENTION_LOGGING_AVAILABLE = True
-except ImportError:
-    ATTENTION_LOGGING_AVAILABLE = False
 
-# Cross-attention monitoring for multi-task models
-try:
-    from utils.cross_attention_monitor import CrossAttentionMonitor
-    CROSS_ATTENTION_MONITOR_AVAILABLE = True
-except ImportError:
-    CROSS_ATTENTION_MONITOR_AVAILABLE = False
 
 from config import build_dataset_config, build_model_config
 from models import build_model
@@ -268,23 +256,7 @@ def train():
     else:
         scaler = None
 
-    # Initialize attention logger for multi-task models
-    attn_logger = None
-    is_multitask = 'multitask' in args.version.lower()
-    if is_multitask and ATTENTION_LOGGING_AVAILABLE and distributed_utils.is_main_process():
-        print('Initializing attention logger for multi-task model...')
-        attn_logger = AttentionLogger(log_dir=path_to_save, log_frequency=100)
-    
-    # Initialize cross-attention monitor for multi-task models
-    ca_monitor = None
-    if is_multitask and CROSS_ATTENTION_MONITOR_AVAILABLE and distributed_utils.is_main_process():
-        print('Initializing cross-attention monitor for multi-task model...')
-        ca_monitor = CrossAttentionMonitor(
-            model_without_ddp,
-            log_dir=path_to_save,
-            log_interval=100,
-            device=device
-        )
+
 
     # eval before training
     if args.eval_first and distributed_utils.is_main_process():
@@ -292,6 +264,7 @@ def train():
         eval_one_epoch(args, model_without_ddp, evaluator, 0, path_to_save, optimizer, lr_scheduler)
 
     # start to train
+    training_start_time = time.time()  # Track total training time for ETA
     t0 = time.time()
     epoch_times = []  # Track epoch durations for ETA
     
@@ -344,10 +317,7 @@ def train():
             else:
                 losses.backward()
 
-            # Cross-attention monitoring for multi-task models
-            # IMPORTANT: Must be called BEFORE zero_grad() to capture actual gradients!
-            if ca_monitor is not None:
-                ca_monitor.log_step(video_clips, targets, loss_dict, epoch, iter_i)
+            # Cross-attention monitoring disabled (noisy, not useful for training progress)
 
             # Optimize
             if ni % accumulate == 0:
@@ -370,13 +340,10 @@ def train():
             if distributed_utils.is_main_process() and iter_i % 10 == 0:
                 t1 = time.time()
                 cur_lr = [param_group['lr']  for param_group in optimizer.param_groups]
-                print_log(cur_lr, epoch,  max_epoch, iter_i, epoch_size,loss_dict_reduced, t1-t0, accumulate)
+                print_log(cur_lr, epoch, max_epoch, iter_i, epoch_size, loss_dict_reduced, 
+                          t1-t0, accumulate, training_start_time)
             
                 t0 = time.time()
-            
-            # Attention logging for multi-task models
-            if attn_logger is not None and iter_i % 100 == 0:
-                attn_logger.log_attention(model_without_ddp, outputs, targets, epoch, iter_i)
 
         lr_scheduler.step()
         
@@ -409,17 +376,7 @@ def train():
             print(f"   🎯 Remaining: {remaining_epochs} epochs")
             print(f"{'='*70}\n")
         
-        # Save attention epoch summary for multi-task models
-        if attn_logger is not None:
-            attn_logger.save_epoch_summary(epoch)
-            # Do detailed attention analysis once per epoch (on last batch)
-            attn_logger.log_detailed_attention(
-                model_without_ddp, video_clips, targets, epoch, iter_i
-            )
         
-        # Save cross-attention epoch summary
-        if ca_monitor is not None:
-            ca_monitor.save_epoch_summary(epoch)
         
         # Evaluation: every eval_epoch epochs OR at the last epoch
         should_eval = (epoch + 1) % args.eval_epoch == 0 or (epoch + 1) == max_epoch
@@ -437,13 +394,26 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, 
         
         weight_name = '{}_epoch_{}.pth'.format(args.version, epoch+1)
         checkpoint_path = os.path.join(path_to_save, weight_name)
-        torch.save({'model': model_eval.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args}, 
-                    checkpoint_path)
+        checkpoint_data = {
+            'model': model_eval.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'lr_scheduler': lr_scheduler.state_dict(),
+            'epoch': epoch,
+            'args': args
+        }
+        torch.save(checkpoint_data, checkpoint_path)
         print(f'   ✅ Saved: {checkpoint_path}')
+        
+        # AUTO-BACKUP TO GOOGLE DRIVE (Colab only)
+        # If /content/drive/MyDrive/yooowo exists, save a backup there
+        gdrive_backup_path = '/content/drive/MyDrive/yooowo'
+        if os.path.isdir(gdrive_backup_path):
+            try:
+                gdrive_checkpoint = os.path.join(gdrive_backup_path, weight_name)
+                torch.save(checkpoint_data, gdrive_checkpoint)
+                print(f'   ☁️  Google Drive backup: {gdrive_checkpoint}')
+            except Exception as e:
+                print(f'   ⚠️  Google Drive backup failed (continuing): {e}')
         
         # THEN EVALUATE
         if evaluator is None:
@@ -466,32 +436,55 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, 
         dist.barrier()
 
 
-def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, time, accumulate):
-    # basic infor
-    log =  '[Epoch: {}/{}]'.format(epoch+1, max_epoch)
-    log += '[Iter: {}/{}]'.format(iter_i, epoch_size)
+def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, batch_time, accumulate, training_start_time=None):
+    """Print clean, useful training log with ETA."""
+    import time as time_module
     
-    # Learning rate - show backbone LR too if different
+    # Basic info
+    log = f'[Epoch {epoch+1}/{max_epoch}][Iter {iter_i}/{epoch_size}]'
+    
+    # Learning rate
     if len(lr) > 1 and lr[0] != lr[1]:
-        log += '[lr: {:.6f}/{:.6f}]'.format(lr[0], lr[1])  # head/backbone
+        log += f'[lr: {lr[0]:.6f}/{lr[1]:.6f}]'
     else:
-        log += '[lr: {:.6f}]'.format(lr[0])
+        log += f'[lr: {lr[0]:.6f}]'
     
-    # loss info - organize by importance
-    total_loss = 0
-    for k in loss_dict.keys():
-        if k == 'losses':
-            total_loss = loss_dict[k] * accumulate
-        else:
-            log += '[{}: {:.2f}]'.format(k, loss_dict[k])
+    # Key losses only (clean format)
+    loss_act = loss_dict.get('loss_act', 0)
+    loss_obj = loss_dict.get('loss_obj', 0)
+    loss_rel = loss_dict.get('loss_rel', 0)
+    loss_box = loss_dict.get('loss_box', 0)
+    total_loss = loss_dict.get('losses', 0) * accumulate
     
-    # Total loss at the end for visibility
-    log += '[total: {:.2f}]'.format(total_loss)
-
-    # other info
-    log += '[time: {:.2f}s]'.format(time)
-
-    # print log info
+    # Convert tensors to floats
+    if hasattr(loss_act, 'item'): loss_act = loss_act.item()
+    if hasattr(loss_obj, 'item'): loss_obj = loss_obj.item()
+    if hasattr(loss_rel, 'item'): loss_rel = loss_rel.item()
+    if hasattr(loss_box, 'item'): loss_box = loss_box.item()
+    if hasattr(total_loss, 'item'): total_loss = total_loss.item()
+    
+    log += f'[act:{loss_act:.2f}][obj:{loss_obj:.2f}][rel:{loss_rel:.2f}][box:{loss_box:.2f}][total:{total_loss:.2f}]'
+    
+    # Time per batch
+    log += f'[{batch_time:.1f}s]'
+    
+    # ETA calculation
+    if training_start_time is not None:
+        elapsed = time_module.time() - training_start_time
+        total_iters = max_epoch * epoch_size
+        current_iter = epoch * epoch_size + iter_i
+        
+        if current_iter > 0:
+            time_per_iter = elapsed / current_iter
+            remaining_iters = total_iters - current_iter
+            eta_seconds = time_per_iter * remaining_iters
+            eta_hours = eta_seconds / 3600
+            
+            if eta_hours >= 1:
+                log += f'[ETA: {eta_hours:.1f}h]'
+            else:
+                log += f'[ETA: {eta_seconds/60:.0f}m]'
+    
     print(log, flush=True)
 
 
