@@ -323,9 +323,13 @@ def train():
             if ni % accumulate == 0:
                 if scaler is not None:
                     scaler.unscale_(optimizer)
+                    # Gradient clipping - REQUIRED to prevent NaN with AMP
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
+                    # Gradient clipping - prevents training explosion
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
                     optimizer.step()
                 optimizer.zero_grad()
                     
