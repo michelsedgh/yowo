@@ -124,7 +124,7 @@ def build_dataset(d_cfg, args, is_train=False):
     elif args.dataset == 'smart_home':
         # Smart Home dataset - filtered Charades-AG with 42 actions
         from dataset.smart_home import SmartHomeDataset
-        from evaluator.smart_home_evaluator import SmartHomeEvaluator
+        from evaluator.smart_home_evaluator_v2 import SmartHomeEvaluatorV2
         import json
         
         data_dir = os.path.join(args.root, 'ActionGenome')
@@ -151,7 +151,7 @@ def build_dataset(d_cfg, args, is_train=False):
         args.smart_home_config = smart_home_config
         
         # evaluator
-        evaluator = SmartHomeEvaluator(
+        evaluator = SmartHomeEvaluatorV2(
             d_cfg=d_cfg,
             data_root=args.root,
             img_size=d_cfg['test_size'],

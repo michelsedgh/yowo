@@ -1,5 +1,10 @@
 """
 Builder for YOWOMultiTask model.
+
+UPDATED:
+- Now uses Focal Loss instead of per-class weights
+- Added use_focal_loss flag (default True)
+- end2end flag now properly passed from args
 """
 
 import torch
@@ -9,21 +14,26 @@ from .loss_multitask import build_multitask_criterion
 
 def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
                           num_objects=36, num_actions=157, num_relations=26,
-                          trainable=False, resume=None, end2end=False):
+                          trainable=False, resume=None):
     """
     Build YOWOMultiTask model and criterion.
     
     Args:
-        end2end: Enable dual-head NMS-free mode (default: False)
+        args: Training arguments (should contain --end2end and --no_focal_loss flags)
     """
-    print("="*30)
+    # Get end2end flag from args (default False for backward compatibility)
+    end2end = getattr(args, 'end2end', False)
+    use_focal_loss = not getattr(args, 'no_focal_loss', False)  # Default: use focal loss
+    
+    print("="*50)
     print("Building YOWOMultiTask")
     print(f"  Objects: {num_objects}")
-    print(f"  Actions: {num_actions}")
+    print(f"  Actions: {num_actions} (Smart Home)" if num_actions == 42 else f"  Actions: {num_actions}")
     print(f"  Relations: {num_relations}")
     print(f"  Total classes: {num_classes}")
     print(f"  End-to-End NMS-Free: {end2end}")
-    print("="*30)
+    print(f"  Focal Loss: {use_focal_loss}")
+    print("="*50)
     
     model = YOWOMultiTask(
         cfg=m_cfg,
@@ -35,24 +45,17 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
         nms_thresh=args.nms_thresh,
         topk=args.topk,
         trainable=trainable,
-        end2end=end2end  # NEW: Enable dual-head NMS-free mode
+        end2end=end2end
     )
     
     # Load checkpoint if provided
     if resume is not None:
         print(f"Loading checkpoint from {resume}")
-        checkpoint = torch.load(resume, map_location='cpu')
+        checkpoint = torch.load(resume, map_location='cpu', weights_only=False)
         model.load_state_dict(checkpoint.get('model', checkpoint), strict=False)
     
     # Build criterion
     if trainable:
-        # Check for smart_home class weights
-        action_class_weights = None
-        if hasattr(args, 'smart_home_config') and args.smart_home_config is not None:
-            action_class_weights = args.smart_home_config.get('action_class_weights', None)
-            if action_class_weights is not None:
-                print(f"  Using class weights: [{min(action_class_weights):.2f}, {max(action_class_weights):.2f}]")
-        
         criterion = build_multitask_criterion(
             args=args,
             img_size=d_cfg['train_size'],
@@ -60,7 +63,7 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
             num_objects=num_objects,
             num_actions=num_actions,
             num_relations=num_relations,
-            action_class_weights=action_class_weights
+            use_focal_loss=use_focal_loss
         )
     else:
         criterion = None

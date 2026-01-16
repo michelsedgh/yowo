@@ -123,7 +123,11 @@ def parse_args():
     parser.add_argument('--loss_reg_weight', default=5, type=float, 
                         help='reg loss weight factor.')
     parser.add_argument('-fl', '--focal_loss', action="store_true", default=False,
-                        help="use focal loss for classification.")
+                        help="use focal loss for classification (OLD - kept for compatibility).")
+    parser.add_argument('--no_focal_loss', action="store_true", default=False,
+                        help="Disable Focal Loss for action/relation heads. By default, Focal Loss is ENABLED and handles class imbalance automatically.")
+    parser.add_argument('--end2end', action="store_true", default=False,
+                        help="Enable NMS-free dual-head training (O2M + O2O heads). Use for YOLO26-style NMS-free inference.")
     parser.add_argument('--label_smoothing', default=0.0, type=float,
                         help='Label smoothing factor for action/relation heads. 0.0=disabled, 0.1=10% smoothing.')
     
@@ -175,6 +179,13 @@ def train():
 
     # dataset and evaluator
     dataset, evaluator, num_classes = build_dataset(d_cfg, args, is_train=True)
+    
+    # DEBUG: Verify class counts are correct
+    print(f"🔍 CLASS COUNT VERIFICATION:")
+    print(f"   Objects:  {d_cfg.get('num_objects', 'default')} (expect 36)")
+    print(f"   Actions:  {d_cfg.get('num_actions', 'default')} (expect 42 for smart_home, 157 for charades)")
+    print(f"   Relations: {d_cfg.get('num_relations', 'default')} (expect 26)")
+    print(f"   Total:    {num_classes}")
 
     # dataloader
     dataloader = build_dataloader(args, dataset, per_gpu_batch, CollateFunc(), is_train=True)

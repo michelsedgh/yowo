@@ -609,3 +609,4 @@ class YOWOMultiTask(nn.Module):
             "anchors": all_anchors,
             "strides": self.stride
         }
+

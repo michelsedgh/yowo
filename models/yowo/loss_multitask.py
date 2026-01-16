@@ -3,8 +3,12 @@ Multi-Task Loss for Action Genome + Charades
 
 Matches the YOWOMultiTask model:
 - Object (0-35): CrossEntropy (exclusive)
-- Actions (36-192): BCE with IoU weighting
-- Relations (193-218): BCE with IoU weighting
+- Actions: Focal Loss with IoU weighting (handles class imbalance)
+- Relations: Focal Loss with IoU weighting (handles class imbalance)
+
+UPDATED: Now uses Focal Loss instead of per-class weights for better
+handling of class imbalance. Focal Loss automatically downweights easy/common
+examples and upweights hard/rare examples.
 """
 
 import torch
@@ -15,16 +19,77 @@ from utils.box_ops import get_ious
 from utils.distributed_utils import get_world_size, is_dist_avail_and_initialized
 
 
+class SigmoidFocalLoss(nn.Module):
+    """
+    Focal Loss for multi-label classification (BCE-based).
+    
+    Focal Loss automatically handles class imbalance by:
+    - Downweighting easy examples (high confidence correct predictions)
+    - Upweighting hard examples (low confidence or wrong predictions)
+    
+    Formula: FL = -alpha_t * (1 - p_t)^gamma * log(p_t)
+    
+    Args:
+        alpha: Balance factor for positive/negative (default 0.25)
+        gamma: Focusing parameter (default 2.0) 
+               Higher gamma = more focus on hard examples
+    """
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='none'):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, logits, targets):
+        """
+        Args:
+            logits: [N, C] - raw predictions (before sigmoid)
+            targets: [N, C] - target labels (0 or 1, or IoU-weighted 0-1)
+        Returns:
+            loss: [N, C] or scalar depending on reduction
+        """
+        p = torch.sigmoid(logits)
+        
+        # Standard BCE loss
+        ce_loss = F.binary_cross_entropy_with_logits(
+            input=logits, target=targets, reduction="none"
+        )
+        
+        # Focal modulation: (1 - p_t)^gamma
+        # p_t = p if target=1, else (1-p)
+        p_t = p * targets + (1.0 - p) * (1.0 - targets)
+        focal_weight = (1.0 - p_t) ** self.gamma
+        
+        loss = focal_weight * ce_loss
+        
+        # Alpha balancing
+        if self.alpha >= 0:
+            alpha_t = self.alpha * targets + (1.0 - self.alpha) * (1.0 - targets)
+            loss = alpha_t * loss
+
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
+
+
 class MultiTaskCriterion(object):
     """
     Multi-task loss for YOWOMultiTask model.
+    
+    Uses:
+    - CrossEntropy for objects (exclusive class)
+    - Focal Loss for actions (multi-label, handles imbalance)
+    - Focal Loss for relations (multi-label, handles imbalance)
     
     Expects outputs with separate pred_obj, pred_act, pred_rel.
     """
     
     def __init__(self, args, img_size, num_classes=219, 
                  num_objects=36, num_actions=157, num_relations=26,
-                 action_class_weights=None):
+                 use_focal_loss=True):
         self.img_size = img_size
         self.num_classes = num_classes
         self.num_objects = num_objects
@@ -34,19 +99,21 @@ class MultiTaskCriterion(object):
         self.loss_conf_weight = args.loss_conf_weight
         self.loss_cls_weight = args.loss_cls_weight
         self.loss_reg_weight = args.loss_reg_weight
-        
-        # Action class weights for imbalanced data (optional)
-        # Shape: [num_actions] - higher weight for rare classes
-        if action_class_weights is not None:
-            self.action_class_weights = torch.tensor(action_class_weights, dtype=torch.float32)
-        else:
-            self.action_class_weights = None
+        self.use_focal_loss = use_focal_loss
         
         # Loss functions
         self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
         self.obj_lossf = nn.CrossEntropyLoss(reduction='none')
-        self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
-        self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')
+        
+        # Focal Loss for actions and relations (handles class imbalance)
+        if use_focal_loss:
+            print("  Using Focal Loss for actions and relations (alpha=0.25, gamma=2.0)")
+            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
+            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
+        else:
+            print("  Using standard BCE for actions and relations")
+            self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
+            self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')
         
         # One-to-Many Matcher (standard, topk>1 for rich supervision)
         self.matcher = SimOTA(
@@ -78,8 +145,8 @@ class MultiTaskCriterion(object):
                     combined[key] = o2m_loss[key] + o2o_loss[key]
             
             # Add per-branch losses for monitoring
-            combined['o2m_losses'] = o2m_loss['losses']
-            combined['o2o_losses'] = o2o_loss['losses']
+            combined['o2m_loss'] = o2m_loss['losses']
+            combined['o2o_loss'] = o2o_loss['losses']
             
             return combined
         else:
@@ -131,7 +198,7 @@ class MultiTaskCriterion(object):
                     pred_ious,
                     matched_gt_inds,
                     num_fg,
-                ) = matcher(  # Use passed matcher (O2M or O2O)
+                ) = matcher(
                     fpn_strides=fpn_strides,
                     anchors=anchors,
                     pred_conf=conf_preds[batch_idx],
@@ -147,16 +214,22 @@ class MultiTaskCriterion(object):
                 # Split labels
                 matched_labels = tgt_labels[matched_gt_inds]
                 
-                # Object: argmax
+                # Object: argmax (exclusive class)
                 obj_target = matched_labels[:, :self.num_objects].argmax(dim=-1)
                 
-                # Actions with IoU weighting
+                # Actions: use IoU weighting only for BCE, not Focal Loss
+                # Focal Loss works better with hard targets (0/1) - it handles difficulty via modulation
+                # BCE with soft labels (IoU-weighted) gives quality-aware supervision
                 act_target = matched_labels[:, self.num_objects:self.num_objects+self.num_actions]
-                act_target = act_target * pred_ious.unsqueeze(-1)
+                if not self.use_focal_loss:
+                    # IoU weighting for BCE (soft labels)
+                    act_target = act_target * pred_ious.unsqueeze(-1)
+                # else: keep hard targets for Focal Loss
                 
-                # Relations with IoU weighting
+                # Relations: same logic
                 rel_target = matched_labels[:, self.num_objects+self.num_actions:]
-                rel_target = rel_target * pred_ious.unsqueeze(-1)
+                if not self.use_focal_loss:
+                    rel_target = rel_target * pred_ious.unsqueeze(-1)
 
             obj_targets.append(obj_target)
             act_targets.append(act_target)
@@ -182,7 +255,7 @@ class MultiTaskCriterion(object):
         loss_conf = self.conf_lossf(conf_preds.view(-1, 1), conf_targets)
         loss_conf = loss_conf.sum() / num_fg
 
-        # Object loss (CrossEntropy)
+        # Object loss (CrossEntropy - exclusive class)
         matched_obj_preds = obj_preds.view(-1, self.num_objects)[fg_masks]
         if len(obj_targets) > 0:
             loss_obj = self.obj_lossf(matched_obj_preds, obj_targets)
@@ -190,19 +263,15 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (BCE) - with optional class weights
+        # Action loss (Focal Loss - multi-label with class imbalance handling)
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0:
-            loss_act = self.act_lossf(matched_act_preds, act_targets)  # [N, num_actions]
-            # Apply class weights if provided
-            if self.action_class_weights is not None:
-                weights = self.action_class_weights.to(device)
-                loss_act = loss_act * weights  # broadcast: [N, num_actions] * [num_actions]
+            loss_act = self.act_lossf(matched_act_preds, act_targets)
             loss_act = loss_act.sum() / num_fg
         else:
             loss_act = torch.tensor(0.0, device=device)
 
-        # Relation loss (BCE)
+        # Relation loss (Focal Loss - multi-label with class imbalance handling)
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)
@@ -239,8 +308,18 @@ class MultiTaskCriterion(object):
 
 def build_multitask_criterion(args, img_size, num_classes=219,
                                num_objects=36, num_actions=157, num_relations=26,
-                               action_class_weights=None):
-    return MultiTaskCriterion(args, img_size, num_classes, 
-                               num_objects, num_actions, num_relations,
-                               action_class_weights=action_class_weights)
+                               use_focal_loss=True):
+    """
+    Build the multi-task criterion.
+    
+    Args:
+        use_focal_loss: If True, use Focal Loss for actions/relations
+                       (recommended, handles class imbalance automatically)
+                       If False, use standard BCE
+    """
+    return MultiTaskCriterion(
+        args, img_size, num_classes, 
+        num_objects, num_actions, num_relations,
+        use_focal_loss=use_focal_loss
+    )
 
