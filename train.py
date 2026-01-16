@@ -322,17 +322,10 @@ def train():
             # Optimize
             if ni % accumulate == 0:
                 if scaler is not None:
-                    # Unscale gradients before clipping
                     scaler.unscale_(optimizer)
-                    # Gradient clipping
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-                    
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    # Gradient clipping
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-                    
                     optimizer.step()
                 optimizer.zero_grad()
                     
