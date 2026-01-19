@@ -177,6 +177,7 @@ class MultiTaskCriterion(object):
         box_targets = []
         conf_targets = []
         fg_masks = []
+        is_person_masks = []  # Track which matched GT is a Person (for action masking)
 
         for batch_idx in range(bs):
             tgt_labels = targets[batch_idx]["labels"].to(device)
@@ -191,6 +192,7 @@ class MultiTaskCriterion(object):
                 box_target = conf_preds.new_zeros((0, 4))
                 conf_target = conf_preds.new_zeros((num_anchors, 1))
                 fg_mask = conf_preds.new_zeros(num_anchors).bool()
+                is_person_mask = conf_preds.new_zeros((0,)).bool()
             else:
                 (
                     gt_matched_classes,
@@ -230,6 +232,9 @@ class MultiTaskCriterion(object):
                 rel_target = matched_labels[:, self.num_objects+self.num_actions:]
                 if not self.use_focal_loss:
                     rel_target = rel_target * pred_ious.unsqueeze(-1)
+                
+                # Person mask: object class 0 is "person" - for action loss masking
+                is_person_mask = (obj_target == 0)
 
             obj_targets.append(obj_target)
             act_targets.append(act_target)
@@ -237,6 +242,7 @@ class MultiTaskCriterion(object):
             box_targets.append(box_target)
             conf_targets.append(conf_target)
             fg_masks.append(fg_mask)
+            is_person_masks.append(is_person_mask)
 
         # Concatenate
         obj_targets = torch.cat(obj_targets, dim=0)
@@ -245,6 +251,7 @@ class MultiTaskCriterion(object):
         box_targets = torch.cat(box_targets, dim=0)
         conf_targets = torch.cat(conf_targets, dim=0)
         fg_masks = torch.cat(fg_masks, dim=0)
+        is_person_masks = torch.cat(is_person_masks, dim=0)  # [total_fg]
         
         num_fg = fg_masks.sum()
         if is_dist_avail_and_initialized():
@@ -263,15 +270,19 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (Focal Loss - multi-label with class imbalance handling)
+        # Action loss (BCE/Focal - multi-label, PERSON-ONLY)
+        # Only compute action loss for Person boxes (class 0)
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
-        if len(act_targets) > 0:
-            loss_act = self.act_lossf(matched_act_preds, act_targets)
-            loss_act = loss_act.sum() / num_fg
+        if len(act_targets) > 0 and is_person_masks.sum() > 0:
+            # Only compute action loss for Person boxes
+            person_act_preds = matched_act_preds[is_person_masks]
+            person_act_targets = act_targets[is_person_masks]
+            loss_act = self.act_lossf(person_act_preds, person_act_targets)
+            loss_act = loss_act.sum() / is_person_masks.sum().clamp(1.0)
         else:
             loss_act = torch.tensor(0.0, device=device)
 
-        # Relation loss (Focal Loss - multi-label with class imbalance handling)
+        # Relation loss (BCE/Focal - multi-label)
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)

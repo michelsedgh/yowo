@@ -58,7 +58,7 @@ class YOWOMultiTaskONNX(nn.Module):
     - ResNeXt: Expects raw [0,1] normalized input (no extra normalization)
     """
     
-    def __init__(self, model: YOWOMultiTask, img_size: int = 224, backbone_3d_type: str = 'resnext'):
+    def __init__(self, model: YOWOMultiTask, img_size: int = 224, backbone_3d_type: str = 'resnext', end2end: bool = False):
         super().__init__()
         self.model = model
         self.img_size = img_size
@@ -67,6 +67,7 @@ class YOWOMultiTaskONNX(nn.Module):
         self.num_actions = model.num_actions
         self.num_relations = model.num_relations
         self.backbone_3d_type = backbone_3d_type
+        self.end2end = end2end  # Use O2O heads for NMS-free inference
         
         # X3D uses ImageNet normalization: mean=[0.45, 0.45, 0.45], std=[0.225, 0.225, 0.225]
         # ResNeXt expects raw [0,1] input - no extra normalization needed
@@ -145,20 +146,31 @@ class YOWOMultiTaskONNX(nn.Module):
             cls_feat, reg_feat = self.model.heads[level](cls_feat, reg_feat)
             
             # ============ CASCADED PREDICTIONS ============
-            # Step 1: Confidence and Object prediction
-            conf_pred = self.model.conf_preds[level](reg_feat)
-            obj_pred = self.model.obj_preds[level](cls_feat)
-            
-            # Step 2: Relation prediction (with object context)
-            rel_feat = self.model.obj_context[level](cls_feat, obj_pred)
-            rel_pred = self.model.rel_preds[level](rel_feat)
-            
-            # Step 3: Action prediction (with object+relation context)
-            act_feat = self.model.rel_context[level](rel_feat, obj_pred, rel_pred)
-            act_pred = self.model.act_preds[level](act_feat)
-            
-            # Box prediction
-            reg_pred = self.model.reg_preds[level](reg_feat)
+            # Use O2O heads if end2end mode (NMS-free)
+            if self.end2end and hasattr(self.model, 'o2o_conf_preds'):
+                # One-to-One heads for NMS-free inference
+                conf_pred = self.model.o2o_conf_preds[level](reg_feat)
+                obj_pred = self.model.o2o_obj_preds[level](cls_feat)
+                
+                rel_feat = self.model.o2o_obj_context[level](cls_feat, obj_pred)
+                rel_pred = self.model.o2o_rel_preds[level](rel_feat)
+                
+                act_feat = self.model.o2o_rel_context[level](cls_feat, obj_pred, rel_pred)
+                act_pred = self.model.o2o_act_preds[level](act_feat)
+                
+                reg_pred = self.model.o2o_reg_preds[level](reg_feat)
+            else:
+                # One-to-Many heads (standard)
+                conf_pred = self.model.conf_preds[level](reg_feat)
+                obj_pred = self.model.obj_preds[level](cls_feat)
+                
+                rel_feat = self.model.obj_context[level](cls_feat, obj_pred)
+                rel_pred = self.model.rel_preds[level](rel_feat)
+                
+                act_feat = self.model.rel_context[level](cls_feat, obj_pred, rel_pred)
+                act_pred = self.model.act_preds[level](act_feat)
+                
+                reg_pred = self.model.reg_preds[level](reg_feat)
             
             # Get feature map dimensions
             fmp_h, fmp_w = conf_pred.shape[-2:]
@@ -209,9 +221,9 @@ def export_onnx(args):
     
     # Create a minimal args namespace for config building
     class Args:
-        def __init__(self, version):
+        def __init__(self, version, dataset):
             self.version = version
-            self.dataset = 'charades_ag'
+            self.dataset = dataset  # Use CLI argument!
             self.img_size = 224
             self.len_clip = 16
             self.conf_thresh = 0.1
@@ -220,7 +232,7 @@ def export_onnx(args):
             self.freeze_backbone_2d = False
             self.freeze_backbone_3d = False
     
-    model_args = Args(args.version)
+    model_args = Args(args.version, args.dataset)
     
     # Build configs
     from config import build_dataset_config, build_model_config
@@ -233,6 +245,22 @@ def export_onnx(args):
     print(f"  Actions: {d_cfg['num_actions']}")
     print(f"  Relations: {d_cfg['num_relations']}")
     
+    # Load checkpoint first to detect end2end mode
+    print(f"\nLoading weights: {args.weight}")
+    checkpoint = torch.load(args.weight, map_location='cpu', weights_only=False)
+    if 'model' in checkpoint:
+        state_dict = checkpoint['model']
+    else:
+        state_dict = checkpoint
+    
+    # Detect end2end mode from checkpoint (look for o2o_ prefixed layers)
+    has_o2o_heads = any(k.startswith('o2o_') for k in state_dict.keys())
+    end2end = args.end2end if args.end2end else has_o2o_heads
+    
+    if has_o2o_heads:
+        print(f"  Detected O2O heads in checkpoint - NMS-free model")
+    print(f"  End-to-End Mode: {end2end}")
+    
     model = YOWOMultiTask(
         cfg=m_cfg,
         device=device,
@@ -242,16 +270,11 @@ def export_onnx(args):
         conf_thresh=0.1,
         nms_thresh=0.5,
         topk=50,
-        trainable=False
+        trainable=False,
+        end2end=end2end  # Enable O2O heads if detected
     )
     
-    # Load weights
-    print(f"\nLoading weights: {args.weight}")
-    checkpoint = torch.load(args.weight, map_location='cpu', weights_only=False)
-    if 'model' in checkpoint:
-        state_dict = checkpoint['model']
-    else:
-        state_dict = checkpoint
+    # Weights already loaded above
     
     # Handle potential key mismatches
     model_state = model.state_dict()
@@ -275,8 +298,10 @@ def export_onnx(args):
     backbone_3d_type = m_cfg.get('backbone_3d', 'resnext101')
     print(f"  3D Backbone: {backbone_3d_type}")
     
-    # Create ONNX wrapper with correct backbone type
-    onnx_model = YOWOMultiTaskONNX(model, img_size=args.img_size, backbone_3d_type=backbone_3d_type)
+    # Create ONNX wrapper with correct backbone type and end2end mode
+    onnx_model = YOWOMultiTaskONNX(model, img_size=args.img_size, backbone_3d_type=backbone_3d_type, end2end=end2end)
+    print(f"  ONNX Export Mode: {'NMS-Free (O2O heads)' if end2end else 'Standard (O2M heads)'}")
+
     onnx_model.to(device)
     onnx_model.eval()
     
@@ -308,7 +333,7 @@ def export_onnx(args):
         dummy_input,
         output_path,
         export_params=True,
-        opset_version=17,  # TensorRT 10.x supports opset 17 well
+        opset_version=18,  # TensorRT 10.x supports opset 18
         do_constant_folding=True,
         input_names=['input'],
         output_names=['output'],
@@ -350,14 +375,24 @@ def main():
     parser = argparse.ArgumentParser(description='YOWO Multi-Task ONNX Export')
     parser.add_argument('--weight', type=str, required=True,
                         help='Path to trained weight file (.pth)')
-    parser.add_argument('--version', type=str, default='yowo_v2_resnext_yolo11m_multitask',
+    parser.add_argument('--version', type=str, default='yowo_v2_resnext_yolo26m_multitask',
                         choices=[
+                            # YOLO11 variants
                             'yowo_v2_resnext_yolo11m_multitask',
                             'yowo_v2_shufflenet_yolo11m_multitask',
                             'yowo_v2_x3d_m_yolo11m_multitask',
                             'yowo_v2_x3d_s_yolo11m_multitask',
+                            # YOLO26 variants (NMS-free native)
+                            'yowo_v2_resnext_yolo26m_multitask',
+                            'yowo_v2_resnext_yolo26l_multitask',
+                            'yowo_v2_shufflenet_yolo26l_multitask',
                         ],
                         help='Model version (must match training config)')
+    parser.add_argument('--dataset', type=str, default='smart_home',
+                        choices=['charades_ag', 'smart_home'],
+                        help='Dataset (smart_home=42 actions, charades_ag=157 actions)')
+    parser.add_argument('--end2end', action='store_true', default=False,
+                        help='Force use O2O heads for NMS-free export (auto-detected from checkpoint)')
     parser.add_argument('--output', type=str, default='yowo_multitask.onnx',
                         help='Output ONNX file path')
     parser.add_argument('--img_size', type=int, default=224,
