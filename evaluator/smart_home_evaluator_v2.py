@@ -264,23 +264,54 @@ class SmartHomeEvaluatorV2:
             print(f"\n   IoU Stats: mean={all_ious.mean():.3f}, median={np.median(all_ious):.3f}")
             print(f"   IoU >0.5: {100*(all_ious >= 0.5).mean():.1f}%, >0.7: {100*(all_ious >= 0.7).mean():.1f}%")
         
-        # 2. OBJECTS
+        # 2. OBJECTS - Full Per-Class Breakdown
         obj_acc = 0
+        object_results = []
         print(f"\n🎯 OBJECT CLASSIFICATION ({len(all_object_gts)} matched boxes):")
         if len(all_object_gts) > 0:
             obj_preds_class = all_object_preds.argmax(axis=1)
             obj_acc = (obj_preds_class == all_object_gts).mean()
             obj_max_probs = all_object_preds.max(axis=1)
-            print(f"   Accuracy: {100*obj_acc:.1f}%")
+            print(f"   Overall Accuracy: {100*obj_acc:.1f}%")
             print(f"   Confidence: mean={obj_max_probs.mean():.3f}, std={obj_max_probs.std():.3f}")
             
-            # Top objects
-            print(f"\n   Per-Object (top 5):")
-            for cls_idx in range(min(5, self.num_objects)):
+            # Per-class object accuracy
+            print(f"\n   {'='*65}")
+            print(f"   📦 PER-OBJECT BREAKDOWN (all {self.num_objects} classes)")
+            print(f"   {'='*65}")
+            print(f"   {'Object':<20} {'GT':>5} {'Correct':>8} {'Acc':>6} {'AvgConf':>8}")
+            print(f"   {'-'*65}")
+            
+            for cls_idx in range(self.num_objects):
                 mask = all_object_gts == cls_idx
-                if mask.sum() > 0:
-                    acc = (obj_preds_class[mask] == cls_idx).mean()
-                    print(f"      {self.object_names[cls_idx]:15} {100*acc:5.1f}% ({mask.sum()} samples)")
+                gt_count = mask.sum()
+                if gt_count > 0:
+                    correct = (obj_preds_class[mask] == cls_idx).sum()
+                    acc = correct / gt_count
+                    avg_conf = all_object_preds[mask, cls_idx].mean()
+                else:
+                    correct = 0
+                    acc = 0
+                    avg_conf = 0
+                
+                obj_name = self.object_names[cls_idx] if cls_idx < len(self.object_names) else f"class_{cls_idx}"
+                object_results.append({
+                    'name': obj_name,
+                    'gt': int(gt_count),
+                    'correct': int(correct),
+                    'accuracy': float(acc),
+                    'avg_conf': float(avg_conf)
+                })
+            
+            # Sort by GT count (most common first)
+            object_results.sort(key=lambda x: -x['gt'])
+            
+            for r in object_results:
+                if r['gt'] > 0:  # Only show classes with GT samples
+                    name = r['name'][:19] if len(r['name']) > 19 else r['name']
+                    print(f"   {name:<20} {r['gt']:>5} {r['correct']:>8} {100*r['accuracy']:>5.1f}% {r['avg_conf']:>7.3f}")
+            
+            print(f"   {'-'*65}")
         
         # 3. ACTIONS
         best_f1 = 0
@@ -383,9 +414,10 @@ class SmartHomeEvaluatorV2:
             print(f"   Legend: GT=count, PredT=mean pred when GT=True (want HIGH)")
             print(f"           PredF=mean pred when GT=False (want LOW), P/R/F1=metrics @{best_thresh}")
         
-        # 4. RELATIONS
+        # 4. RELATIONS - Full Per-Class Breakdown
         best_f1_rel = 0
         best_thresh_rel = 0.3
+        relation_results = []
         print(f"\n🔗 RELATIONS ({len(all_relation_preds)} boxes):")
         if len(all_relation_preds) > 0:
             rel_gt_pos = all_relation_gts == True
@@ -395,7 +427,9 @@ class SmartHomeEvaluatorV2:
             if rel_gt_neg.any():
                 print(f"   When GT=False: mean={all_relation_preds[rel_gt_neg].mean():.4f}")
             
-            for thresh in [0.1, 0.2, 0.3, 0.5]:
+            # Find best threshold
+            print(f"\n   Threshold Analysis:")
+            for thresh in [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]:
                 pred_bin = all_relation_preds > thresh
                 tp = (pred_bin & all_relation_gts).sum()
                 fp = (pred_bin & ~all_relation_gts).sum()
@@ -406,8 +440,56 @@ class SmartHomeEvaluatorV2:
                 if f1 > best_f1_rel:
                     best_f1_rel = f1
                     best_thresh_rel = thresh
+                print(f"      @{thresh:.2f}: P={100*prec:.1f}% R={100*rec:.1f}% F1={100*f1:.1f}%")
             
-            print(f"   Best: thresh={best_thresh_rel}, F1={100*best_f1_rel:.1f}%")
+            print(f"\n   ✅ Best: thresh={best_thresh_rel}, F1={100*best_f1_rel:.1f}%")
+            
+            # Per-relation breakdown
+            print(f"\n   {'='*75}")
+            print(f"   📦 PER-RELATION BREAKDOWN (all {self.num_relations} relations)")
+            print(f"   {'='*75}")
+            print(f"   {'Relation':<25} {'GT':>4} {'PredT':>6} {'PredF':>6} {'P':>5} {'R':>5} {'F1':>5}")
+            print(f"   {'-'*75}")
+            
+            for rel_idx in range(self.num_relations):
+                gt_count = all_relation_gts[:, rel_idx].sum()
+                preds_this_rel = all_relation_preds[:, rel_idx]
+                gt_this_rel = all_relation_gts[:, rel_idx]
+                
+                # Raw probability stats
+                mean_when_true = preds_this_rel[gt_this_rel].mean() if gt_this_rel.any() else 0
+                mean_when_false = preds_this_rel[~gt_this_rel].mean() if (~gt_this_rel).any() else 0
+                
+                # P/R/F1
+                pred_bin = preds_this_rel > best_thresh_rel
+                tp = (pred_bin & gt_this_rel).sum()
+                fp = (pred_bin & ~gt_this_rel).sum()
+                fn = (~pred_bin & gt_this_rel).sum()
+                prec = tp / max(tp + fp, 1)
+                rec = tp / max(tp + fn, 1)
+                f1 = 2 * prec * rec / max(prec + rec, 0.001)
+                
+                rel_name = self.relation_names[rel_idx] if rel_idx < len(self.relation_names) else f"rel_{rel_idx}"
+                relation_results.append({
+                    'name': rel_name,
+                    'gt': int(gt_count),
+                    'pred_when_true': float(mean_when_true),
+                    'pred_when_false': float(mean_when_false),
+                    'prec': float(prec), 'rec': float(rec), 'f1': float(f1)
+                })
+            
+            # Sort by F1 for display
+            relation_results.sort(key=lambda x: -x['f1'])
+            
+            for r in relation_results:
+                name = r['name'][:24] if len(r['name']) > 24 else r['name']
+                pred_t = r['pred_when_true']
+                pred_f = r['pred_when_false']
+                print(f"   {name:<25} {r['gt']:>4} {pred_t:>5.2f}  {pred_f:>5.2f}  {100*r['prec']:>4.0f}% {100*r['rec']:>4.0f}% {100*r['f1']:>4.0f}%")
+            
+            print(f"   {'-'*75}")
+            print(f"   Legend: GT=count, PredT=mean pred when GT=True (want HIGH)")
+            print(f"           PredF=mean pred when GT=False (want LOW), P/R/F1=metrics @{best_thresh_rel}")
         
         # SUMMARY
         print(f"\n{'='*70}")
@@ -424,6 +506,75 @@ class SmartHomeEvaluatorV2:
         print(f"   Time:           {elapsed:.1f}s")
         print(f"{'='*70}")
         
+        # PRACTICAL AUTOMATION SCORES
+        print(f"\n{'='*70}")
+        print(f"🏠 PRACTICAL AUTOMATION SCORES - Epoch {epoch}")
+        print(f"{'='*70}")
+        
+        # Calculate automation-ready scores per action
+        automation_ready = []
+        if len(action_results) > 0:
+            for r in action_results:
+                # An action is "automation ready" if:
+                # - High precision (low false positives - don't trigger wrong automations)
+                # - Reasonable recall (catches most occurrences)
+                # - Good separation (pred_when_true >> pred_when_false)
+                separation = r['pred_when_true'] - r['pred_when_false']
+                score = r['prec'] * 0.4 + r['rec'] * 0.3 + separation * 0.3
+                
+                if r['gt'] >= 10:  # Only consider actions with enough samples
+                    automation_ready.append({
+                        'name': r['name'],
+                        'gt': r['gt'],
+                        'prec': r['prec'],
+                        'rec': r['rec'],
+                        'separation': separation,
+                        'automation_score': score
+                    })
+            
+            if automation_ready:
+                automation_ready.sort(key=lambda x: -x['automation_score'])
+                
+                print(f"\n   🟢 READY FOR AUTOMATION (>70% score):")
+                ready_count = 0
+                for a in automation_ready:
+                    if a['automation_score'] > 0.70:
+                        ready_count += 1
+                        print(f"      ✓ {a['name'][:30]:<32} Score: {100*a['automation_score']:.0f}%")
+                
+                if ready_count == 0:
+                    print(f"      None yet - keep training!")
+                
+                print(f"\n   🟡 GETTING CLOSE (50-70% score):")
+                close_count = 0
+                for a in automation_ready:
+                    if 0.50 <= a['automation_score'] <= 0.70:
+                        close_count += 1
+                        print(f"      ~ {a['name'][:30]:<32} Score: {100*a['automation_score']:.0f}% (P:{100*a['prec']:.0f}% R:{100*a['rec']:.0f}%)")
+                
+                if close_count == 0:
+                    print(f"      None in this range")
+                
+                print(f"\n   🔴 NEEDS MORE TRAINING (<50% score):")
+                need_count = 0
+                for a in automation_ready[:10]:  # Top 10 only
+                    if a['automation_score'] < 0.50:
+                        need_count += 1
+                        print(f"      ✗ {a['name'][:30]:<32} Score: {100*a['automation_score']:.0f}%")
+                
+                if need_count == 0:
+                    print(f"      All actions above 50%!")
+                
+                # Overall readiness
+                pct_ready = sum(1 for a in automation_ready if a['automation_score'] > 0.70) / len(automation_ready)
+                pct_close = sum(1 for a in automation_ready if a['automation_score'] > 0.50) / len(automation_ready)
+                
+                print(f"\n   📊 OVERALL READINESS:")
+                print(f"      Actions >70% (ready):  {100*pct_ready:.0f}% ({sum(1 for a in automation_ready if a['automation_score'] > 0.70)}/{len(automation_ready)})")
+                print(f"      Actions >50% (usable): {100*pct_close:.0f}% ({sum(1 for a in automation_ready if a['automation_score'] > 0.50)}/{len(automation_ready)})")
+        
+        print(f"{'='*70}")
+        
         # Save
         results = {
             'epoch': epoch,
@@ -437,7 +588,9 @@ class SmartHomeEvaluatorV2:
             'relation_best_f1': float(best_f1_rel),
             'relation_best_thresh': float(best_thresh_rel),
             'iou_mean': float(all_ious.mean()) if len(all_ious) > 0 else 0,
+            'per_object': object_results,
             'per_action': action_results,
+            'per_relation': relation_results,
         }
         
         save_file = os.path.join(self.save_path, f'smart_home_eval_epoch_{epoch}.json')
