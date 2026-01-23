@@ -149,25 +149,29 @@ class YOWOMultiTaskONNX(nn.Module):
             # Use O2O heads if end2end mode (NMS-free)
             if self.end2end and hasattr(self.model, 'o2o_conf_preds'):
                 # One-to-One heads for NMS-free inference
+                # V2: Confidence must be computed FIRST for context gating!
                 conf_pred = self.model.o2o_conf_preds[level](reg_feat)
                 obj_pred = self.model.o2o_obj_preds[level](cls_feat)
                 
-                rel_feat = self.model.o2o_obj_context[level](cls_feat, obj_pred)
+                # V2: Pass conf_pred to context modules for grounded attention
+                rel_feat = self.model.o2o_obj_context[level](cls_feat, obj_pred, conf_pred)
                 rel_pred = self.model.o2o_rel_preds[level](rel_feat)
                 
-                act_feat = self.model.o2o_rel_context[level](cls_feat, obj_pred, rel_pred)
+                act_feat = self.model.o2o_rel_context[level](cls_feat, obj_pred, rel_pred, conf_pred)
                 act_pred = self.model.o2o_act_preds[level](act_feat)
                 
                 reg_pred = self.model.o2o_reg_preds[level](reg_feat)
             else:
                 # One-to-Many heads (standard)
+                # V2: Confidence must be computed FIRST for context gating!
                 conf_pred = self.model.conf_preds[level](reg_feat)
                 obj_pred = self.model.obj_preds[level](cls_feat)
                 
-                rel_feat = self.model.obj_context[level](cls_feat, obj_pred)
+                # V2: Pass conf_pred to context modules for grounded attention
+                rel_feat = self.model.obj_context[level](cls_feat, obj_pred, conf_pred)
                 rel_pred = self.model.rel_preds[level](rel_feat)
                 
-                act_feat = self.model.rel_context[level](cls_feat, obj_pred, rel_pred)
+                act_feat = self.model.rel_context[level](cls_feat, obj_pred, rel_pred, conf_pred)
                 act_pred = self.model.act_preds[level](act_feat)
                 
                 reg_pred = self.model.reg_preds[level](reg_feat)
@@ -313,7 +317,9 @@ def export_onnx(args):
     with torch.no_grad():
         output = onnx_model(dummy_input)
     print(f"  Output shape: {output.shape}")
-    print(f"  Expected: [N, 224] where N = sum of grid cells across scales")
+    # Calculate expected output dimension dynamically
+    expected_output_dim = 1 + d_cfg['num_objects'] + d_cfg['num_actions'] + d_cfg['num_relations'] + 4
+    print(f"  Expected: [N, {expected_output_dim}] where N = sum of grid cells across scales")
     
     # Calculate expected N
     # For 224x224 input with strides [8, 16, 32]:
@@ -324,6 +330,10 @@ def export_onnx(args):
     expected_n = (args.img_size // 8) ** 2 + (args.img_size // 16) ** 2 + (args.img_size // 32) ** 2
     print(f"  Expected N: {expected_n}")
     
+    # Calculate output dimension: conf(1) + obj + act + rel + box(4)
+    output_dim = 1 + d_cfg['num_objects'] + d_cfg['num_actions'] + d_cfg['num_relations'] + 4
+    print(f"  Output dim: {output_dim} = 1 + {d_cfg['num_objects']} + {d_cfg['num_actions']} + {d_cfg['num_relations']} + 4")
+    
     # Export to ONNX
     output_path = args.output
     print(f"\nExporting to ONNX: {output_path}")
@@ -333,21 +343,25 @@ def export_onnx(args):
         dummy_input,
         output_path,
         export_params=True,
-        opset_version=18,  # TensorRT 10.x supports opset 18
+        opset_version=17,
         do_constant_folding=True,
         input_names=['input'],
         output_names=['output'],
-        dynamic_axes=None  # Fixed shapes for best TensorRT optimization
+        dynamic_axes=None,  # Fixed shapes for best TensorRT optimization
+        dynamo=False  # Force legacy export (dynamo doesn't work with this model)
     )
     
     print(f"  ONNX model saved!")
     
-    # Verify ONNX model
-    print("\nVerifying ONNX model...")
-    import onnx
-    onnx_model_check = onnx.load(output_path)
-    onnx.checker.check_model(onnx_model_check)
-    print("  ONNX model verification passed!")
+    # Verify ONNX model (optional)
+    if not getattr(args, 'no_verify', False):
+        print("\nVerifying ONNX model...")
+        import onnx
+        onnx_model_check = onnx.load(output_path)
+        onnx.checker.check_model(onnx_model_check)
+        print("  ONNX model verification passed!")
+    else:
+        print("\nSkipping ONNX verification (--no_verify)")
     
     # Print model info
     print(f"\n{'=' * 60}")
@@ -356,14 +370,17 @@ def export_onnx(args):
     print(f"  File: {output_path}")
     print(f"  Size: {os.path.getsize(output_path) / 1024 / 1024:.1f} MB")
     print(f"  Input: [1, 3, {args.len_clip}, {args.img_size}, {args.img_size}]")
-    print(f"  Output: [{expected_n}, 224]")
+    print(f"  Output: [{expected_n}, {output_dim}]")
     print()
     print("Output format per row:")
     print("  [0]: conf (sigmoid)")
-    print("  [1:37]: object probs (softmax, 36 classes)")
-    print("  [37:194]: action probs (sigmoid, 157 classes)")
-    print("  [194:220]: relation probs (sigmoid, 26 classes)")
-    print("  [220:224]: box [x1, y1, x2, y2] (pixel coords)")
+    obj_end = 1 + d_cfg['num_objects']
+    act_end = obj_end + d_cfg['num_actions']
+    rel_end = act_end + d_cfg['num_relations']
+    print(f"  [1:{obj_end}]: object probs (softmax, {d_cfg['num_objects']} classes)")
+    print(f"  [{obj_end}:{act_end}]: action probs (sigmoid, {d_cfg['num_actions']} classes)")
+    print(f"  [{act_end}:{rel_end}]: relation probs (sigmoid, {d_cfg['num_relations']} classes)")
+    print(f"  [{rel_end}:{output_dim}]: box [x1, y1, x2, y2] (pixel coords)")
     print()
     print("Next step: Build TensorRT engine:")
     print(f"  trtexec --onnx={output_path} --saveEngine=yowo_multitask_fp16.engine --fp16 --workspace=4096")
@@ -399,6 +416,8 @@ def main():
                         help='Input image size')
     parser.add_argument('--len_clip', type=int, default=16,
                         help='Clip length (number of frames)')
+    parser.add_argument('--no_verify', action='store_true', default=False,
+                        help='Skip ONNX verification (faster export)')
     
     args = parser.parse_args()
     
