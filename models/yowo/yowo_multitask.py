@@ -1,17 +1,19 @@
 """
-YOWO Multi-Task for Action Genome + Charades
+YOWO Multi-Task V2 for Action Genome + Charades
+
+CRITICAL FIX: Use objectness confidence to gate attention!
+
+The previous version had a fatal flaw:
+- Object prediction is softmax over 36 classes (no background)
+- obj_probs.max() is always high (~0.7) even at background positions
+- Attention spread uniformly → no spatial grounding
+
+This version fixes it by:
+1. Passing confidence logits to context modules  
+2. Using conf * obj_probs as "grounded object presence"
+3. Only attending to positions where objects are ACTUALLY detected
 
 DEFINITIVE CASCADE: Object → Relation → Action
-
-Why this order:
-1. OBJECTS: "What is this?" - No dependencies
-2. RELATIONS: "What is the relation between person and object?" - Needs objects
-3. ACTIONS: "What is person doing?" - Needs objects AND relations
-
-Example: "Person typing on laptop"
-  - Object detection: person, laptop
-  - Relation: person is "holding" laptop, "looking_at" laptop  
-  - Action: "typing" (confident because holding + looking_at laptop)
 """
 
 import copy
@@ -28,99 +30,141 @@ from .head import build_head
 from utils.nms import multiclass_nms
 
 
-class ObjectContextModule(nn.Module):
+class ObjectContextModuleV2(nn.Module):
     """
-    Provides object context to the relation head.
+    FIXED: Object context with confidence-gated attention.
     
-    KEY FIX: Uses SOFTMAX-normalized predictions instead of raw logits.
-    
-    This ensures:
-    1. Context values are in [0,1] range (probabilities)
-    2. Semantic meaning: high probability = this object class is present
-    3. Balanced magnitudes with features for proper fusion
-    4. Gradients flow through softmax to object predictions
+    Now receives conf_logits to know WHERE objects actually exist.
+    Attention only focuses on positions with high objectness confidence.
     """
-    def __init__(self, dim=256, num_classes=36):
+    def __init__(self, dim=256, num_classes=36, num_heads=4):
         super().__init__()
         self.dim = dim
         self.num_classes = num_classes
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
         
-        # Project object probabilities to feature dimension
-        # Input is softmax probabilities [0,1], not raw logits
-        self.context_proj = nn.Sequential(
+        # Query: from classification features
+        self.q_proj = nn.Conv2d(dim, dim, kernel_size=1)
+        
+        # Key: from CONFIDENCE-WEIGHTED object predictions
+        # Input: obj_probs * conf (grounded predictions)
+        self.k_proj = nn.Sequential(
             nn.Conv2d(num_classes, dim, kernel_size=1),
             nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        # Initialize to preserve probability magnitudes
-        for m in self.context_proj:
-            if isinstance(m, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight, gain=1.0)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-        
-        # Fusion: combine features with object context
-        self.fusion = nn.Sequential(
-            nn.Conv2d(dim * 2, dim, kernel_size=1),
+        # Value: object information to aggregate
+        self.v_proj = nn.Sequential(
+            nn.Conv2d(num_classes, dim, kernel_size=1),
             nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1)
         )
         
-        # Initialize fusion to start as identity-like for features
-        nn.init.xavier_uniform_(self.fusion[0].weight, gain=0.5)
-        nn.init.xavier_uniform_(self.fusion[2].weight, gain=0.5)
+        # Relative position bias
+        max_size = 32
+        self.rel_pos_bias = nn.Parameter(torch.zeros(num_heads, 2*max_size-1, 2*max_size-1))
+        nn.init.trunc_normal_(self.rel_pos_bias, std=0.02)
         
-        # GroupNorm for stable training
+        # Output projection
+        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
         self.norm = nn.GroupNorm(32, dim)
+        
+        nn.init.xavier_uniform_(self.q_proj.weight, gain=1.0)
+        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.5)
     
-    def forward(self, cls_feat, pred_logits, return_weights=False):
+    def get_rel_pos_bias(self, H, W, device):
+        """Generate relative position bias for H x W grid."""
+        coords_h = torch.arange(H, device=device)
+        coords_w = torch.arange(W, device=device)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))
+        coords_flat = coords.reshape(2, -1)
+        
+        rel_coords = coords_flat[:, :, None] - coords_flat[:, None, :]
+        rel_coords = rel_coords.permute(1, 2, 0).contiguous()
+        
+        rel_coords[:, :, 0] += self.rel_pos_bias.shape[1] // 2
+        rel_coords[:, :, 1] += self.rel_pos_bias.shape[2] // 2
+        rel_coords = rel_coords.clamp(0, self.rel_pos_bias.shape[1] - 1)
+        
+        rel_pos_idx = rel_coords[:, :, 0] * self.rel_pos_bias.shape[2] + rel_coords[:, :, 1]
+        rel_pos_idx = rel_pos_idx.long()
+        
+        bias = self.rel_pos_bias.view(self.num_heads, -1)[:, rel_pos_idx.view(-1)]
+        bias = bias.view(self.num_heads, H*W, H*W)
+        
+        return bias
+    
+    def forward(self, cls_feat, obj_logits, conf_logits, return_weights=False):
         """
+        FIXED: Now uses confidence to weight object predictions.
+        
         Args:
             cls_feat: [B, C, H, W] - features 
-            pred_logits: [B, num_classes, H, W] - object predictions (LOGITS)
+            obj_logits: [B, 36, H, W] - object class predictions (logits)
+            conf_logits: [B, 1, H, W] - objectness confidence (logits)
         Returns:
-            context_feat: [B, C, H, W] - features enriched with object context
+            context_feat: [B, C, H, W] - features enriched with spatial object context
         """
-        # CRITICAL FIX: Convert logits to probabilities with softmax
-        # Now obj_probs is in [0,1] with semantic meaning
-        obj_probs = F.softmax(pred_logits, dim=1)  # [B, num_classes, H, W]
+        B, C, H, W = cls_feat.shape
+        N = H * W
         
-        # Project probabilities to context embedding
-        obj_context = self.context_proj(obj_probs)  # [B, C, H, W]
+        # Convert to probabilities
+        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
+        conf = torch.sigmoid(conf_logits)  # [B, 1, H, W] - true objectness!
         
-        # Match context magnitude to features for balanced fusion
-        feat_scale = cls_feat.abs().mean().clamp(min=0.01)
-        ctx_scale = obj_context.abs().mean().clamp(min=0.01)
-        obj_context = obj_context * (feat_scale / ctx_scale)
+        # CRITICAL FIX: Weight object probs by confidence
+        # Background positions (low conf) → all object probs suppressed
+        # Object positions (high conf) → object probs preserved
+        grounded_obj = obj_probs * conf  # [B, 36, H, W]
         
-        # Concatenate and fuse
-        combined = torch.cat([cls_feat, obj_context], dim=1)  # [B, 2C, H, W]
-        delta = self.fusion(combined)  # [B, C, H, W]
+        # Project Q, K, V
+        Q = self.q_proj(cls_feat)
+        K = self.k_proj(grounded_obj)  # Now uses confidence-weighted predictions!
+        V = self.v_proj(grounded_obj)
         
-        # Residual connection + normalization
-        out = self.norm(cls_feat + delta)
+        # Reshape for multi-head attention
+        Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
+        
+        # Attention scores
+        attn = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
+        
+        # Relative position bias
+        rel_pos_bias = self.get_rel_pos_bias(H, W, cls_feat.device)
+        attn = attn + rel_pos_bias.unsqueeze(0)
+        
+        # CRITICAL FIX: Use CONFIDENCE as presence bias (not obj_probs.max())
+        # conf already tells us where objects are detected
+        conf_flat = conf.view(B, 1, 1, N)  # [B, 1, 1, N]
+        presence_bias = (conf_flat - 0.3) * 8.0  # Strong bias: conf>0.3 → attend, else suppress
+        attn = attn + presence_bias
+        
+        # Softmax
+        attn_weights = F.softmax(attn, dim=-1)
+        
+        # Apply attention
+        out = torch.matmul(attn_weights, V)
+        out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
+        
+        # Output projection + residual
+        out = self.out_proj(out)
+        out = self.norm(cls_feat + out)
         
         if return_weights:
-            B, C, H, W = cls_feat.shape
-            dummy_weights = torch.ones(B, H*W, H*W, device=cls_feat.device) / (H*W)
-            return out, dummy_weights
+            return out, attn_weights.mean(dim=1)
         return out
 
 
-class SceneContextAttention(nn.Module):
+class SceneContextAttentionV2(nn.Module):
     """
-    Cross-attention for action prediction using object+relation context.
+    FIXED: Scene context with confidence-gated attention.
     
-    KEY FIX: Uses NORMALIZED predictions (softmax/sigmoid) instead of raw logits.
-    
-    This ensures:
-    1. Object probs in [0,1] via softmax (exclusive classes)
-    2. Relation probs in [0,1] via sigmoid (multi-label)
-    3. Balanced Q/K magnitudes for meaningful attention
-    4. Model learns WHERE to attend based on WHAT objects/relations exist
+    For action prediction, attends to positions where objects AND relations
+    are actually detected (not just raw softmax probabilities).
     """
-    def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=8):
+    def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=4):
         super().__init__()
         self.dim = dim
         self.num_objects = num_objects
@@ -129,145 +173,130 @@ class SceneContextAttention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
         
-        # Query projection: from features
-        self.query_proj = nn.Conv2d(dim, dim, kernel_size=1)
+        # Query: from classification features
+        self.q_proj = nn.Conv2d(dim, dim, kernel_size=1)
         
-        # Key projection: from normalized context predictions
-        # Input is probabilities [0,1], dimensionality = num_objects + num_relations
-        self.key_proj = nn.Sequential(
+        # Key/Value: from confidence-weighted object + relation predictions
+        self.k_proj = nn.Sequential(
             nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
             nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1)
         )
-        
-        # Value projection: features + context for rich retrieval
-        self.context_to_value = nn.Sequential(
+        self.v_proj = nn.Sequential(
             nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
             nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1)
         )
-        self.value_fusion = nn.Conv2d(dim * 2, dim, kernel_size=1)
         
-        # Output projection with small init for stable residual
-        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
-        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.1)
-        
-        # Position encoding (helps query be position-aware)
+        # Relative position bias
         max_size = 32
-        self.pos_embed_h = nn.Parameter(torch.zeros(1, dim // 2, max_size, 1))
-        self.pos_embed_w = nn.Parameter(torch.zeros(1, dim // 2, 1, max_size))
-        nn.init.normal_(self.pos_embed_h, std=0.02)
-        nn.init.normal_(self.pos_embed_w, std=0.02)
+        self.rel_pos_bias = nn.Parameter(torch.zeros(num_heads, 2*max_size-1, 2*max_size-1))
+        nn.init.trunc_normal_(self.rel_pos_bias, std=0.02)
         
-        # Initialize projections for balanced magnitudes
-        for module in [self.key_proj, self.context_to_value]:
-            for m in module:
-                if isinstance(m, nn.Conv2d):
-                    nn.init.xavier_uniform_(m.weight, gain=1.0)
-                    if m.bias is not None:
-                        nn.init.zeros_(m.bias)
-        
-        # GroupNorm for stable training
+        # Output projection
+        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
         self.norm = nn.GroupNorm(32, dim)
+        
+        nn.init.xavier_uniform_(self.q_proj.weight, gain=1.0)
+        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.5)
     
-    def get_position_encoding(self, H, W, device):
-        """Generate 2D position encoding."""
-        pos_h = F.interpolate(
-            self.pos_embed_h, size=(H, 1), mode='bilinear', align_corners=False
-        )
-        pos_w = F.interpolate(
-            self.pos_embed_w, size=(1, W), mode='bilinear', align_corners=False
-        )
-        pos_h = pos_h.expand(-1, -1, -1, W)
-        pos_w = pos_w.expand(-1, -1, H, -1)
-        return torch.cat([pos_h, pos_w], dim=1)
+    def get_rel_pos_bias(self, H, W, device):
+        coords_h = torch.arange(H, device=device)
+        coords_w = torch.arange(W, device=device)
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))
+        coords_flat = coords.reshape(2, -1)
+        
+        rel_coords = coords_flat[:, :, None] - coords_flat[:, None, :]
+        rel_coords = rel_coords.permute(1, 2, 0).contiguous()
+        
+        rel_coords[:, :, 0] += self.rel_pos_bias.shape[1] // 2
+        rel_coords[:, :, 1] += self.rel_pos_bias.shape[2] // 2
+        rel_coords = rel_coords.clamp(0, self.rel_pos_bias.shape[1] - 1)
+        
+        rel_pos_idx = rel_coords[:, :, 0] * self.rel_pos_bias.shape[2] + rel_coords[:, :, 1]
+        rel_pos_idx = rel_pos_idx.long()
+        
+        bias = self.rel_pos_bias.view(self.num_heads, -1)[:, rel_pos_idx.view(-1)]
+        bias = bias.view(self.num_heads, H*W, H*W)
+        
+        return bias
     
-    def forward(self, cls_feat, obj_pred, rel_pred, return_weights=False):
+    def forward(self, cls_feat, obj_logits, rel_logits, conf_logits, return_weights=False):
         """
+        FIXED: Now uses confidence to weight context.
+        
         Args:
             cls_feat: [B, C, H, W] - features
-            obj_pred: [B, 36, H, W] - object predictions (LOGITS)
-            rel_pred: [B, 26, H, W] - relation predictions (LOGITS)
+            obj_logits: [B, 36, H, W] - object predictions (logits)
+            rel_logits: [B, 26, H, W] - relation predictions (logits)
+            conf_logits: [B, 1, H, W] - objectness confidence (logits)
         Returns:
-            context_feat: [B, C, H, W] - features enriched with scene context
+            context_feat: [B, C, H, W] - features with spatial object+relation context
         """
         B, C, H, W = cls_feat.shape
         N = H * W
         
-        # CRITICAL FIX: Normalize predictions to probabilities
-        # Objects: softmax (mutually exclusive)
-        # Relations: sigmoid (multi-label)
-        obj_probs = F.softmax(obj_pred, dim=1)  # [B, 36, H, W], sums to 1
-        rel_probs = torch.sigmoid(rel_pred)     # [B, 26, H, W], each in [0,1]
+        # Convert to probabilities
+        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
+        rel_probs = torch.sigmoid(rel_logits)     # [B, 26, H, W]
+        conf = torch.sigmoid(conf_logits)         # [B, 1, H, W]
         
-        # Combine normalized predictions
-        context_probs = torch.cat([obj_probs, rel_probs], dim=1)  # [B, 62, H, W]
+        # CRITICAL FIX: Weight by confidence
+        grounded_obj = obj_probs * conf  # [B, 36, H, W]
+        grounded_rel = rel_probs * conf  # [B, 26, H, W]
         
-        # Query: features + position encoding
-        pos = self.get_position_encoding(H, W, cls_feat.device)
-        Q = self.query_proj(cls_feat) + pos  # [B, C, H, W]
+        # Combine grounded context
+        context_probs = torch.cat([grounded_obj, grounded_rel], dim=1)  # [B, 62, H, W]
         
-        # Key: from context probabilities (semantic content)
-        K = self.key_proj(context_probs)  # [B, C, H, W]
+        # Project Q, K, V
+        Q = self.q_proj(cls_feat)
+        K = self.k_proj(context_probs)
+        V = self.v_proj(context_probs)
         
-        # Match Q and K magnitudes for balanced attention
-        q_scale = Q.abs().mean().clamp(min=0.01)
-        k_scale = K.abs().mean().clamp(min=0.01)
-        K = K * (q_scale / k_scale)
-        
-        # Value: features + projected context
-        context_features = self.context_to_value(context_probs)
-        # Scale context to match features
-        feat_scale = cls_feat.abs().mean().clamp(min=0.01)
-        ctx_scale = context_features.abs().mean().clamp(min=0.01)
-        context_features = context_features * (feat_scale / ctx_scale)
-        V = self.value_fusion(torch.cat([cls_feat, context_features], dim=1))
-        
-        # Reshape for multi-head attention: [B, heads, N, head_dim]
+        # Reshape for multi-head attention
         Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
         K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
         V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
         
-        # Attention: Q @ K^T / sqrt(d)
-        attn = (Q @ K.transpose(-2, -1)) * self.scale
+        # Attention scores
+        attn = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
+        
+        # Relative position bias
+        rel_pos_bias = self.get_rel_pos_bias(H, W, cls_feat.device)
+        attn = attn + rel_pos_bias.unsqueeze(0)
+        
+        # CRITICAL FIX: Use confidence as presence bias
+        conf_flat = conf.view(B, 1, 1, N)
+        presence_bias = (conf_flat - 0.3) * 8.0
+        attn = attn + presence_bias
+        
+        # Softmax
         attn_weights = F.softmax(attn, dim=-1)
         
-        # Attend to values
-        attended = attn_weights @ V
+        # Apply attention
+        out = torch.matmul(attn_weights, V)
+        out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
         
-        # Reshape back
-        attended = attended.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)
-        attended = self.out_proj(attended)
-        
-        # Residual + norm
-        out = self.norm(cls_feat + attended)
+        # Output projection + residual
+        out = self.out_proj(out)
+        out = self.norm(cls_feat + out)
         
         if return_weights:
             return out, attn_weights.mean(dim=1)
         return out
 
 
-# Aliases for backward compatibility
-ObjectContext = ObjectContextModule
-RelationContext = SceneContextAttention
-ObjectCrossAttention = ObjectContextModule
-ObjectRelationCrossAttention = SceneContextAttention
-ObjectRelationContextModule = SceneContextAttention  # Old class name from 810e3af
+# Keep aliases for backward compatibility with old names
+ObjectContextModule = ObjectContextModuleV2
+SceneContextAttention = SceneContextAttentionV2  
+ObjectContext = ObjectContextModuleV2
+RelationContext = SceneContextAttentionV2
 
 
-class YOWOMultiTask(nn.Module):
+class YOWOMultiTaskV2(nn.Module):
     """
-    YOWO Multi-Task with full cascade: Object → Relation → Action
+    YOWO Multi-Task V2 with FIXED cascade: Object → Relation → Action
     
-    Architecture:
-    1. Backbone (same as YOWO): 2D + 3D feature extraction
-    2. Object Head: predict 36 object classes
-    3. ObjectContext: enrich features with object positions
-    4. Relation Head: predict 26 relation classes  
-    5. RelationContext: enrich features with relation info
-    6. Action Head: predict 157 action classes
-    
-    NEW: end2end mode enables dual-head for NMS-free inference.
+    Key fix: Context modules now receive confidence logits to know
+    WHERE objects are actually detected, not just WHAT class they might be.
     """
     
     def __init__(self, 
@@ -280,8 +309,8 @@ class YOWOMultiTask(nn.Module):
                  nms_thresh=0.6,
                  topk=50,
                  trainable=False,
-                 end2end=False):  # NEW: Enable dual-head NMS-free mode
-        super(YOWOMultiTask, self).__init__()
+                 end2end=False):
+        super(YOWOMultiTaskV2, self).__init__()
         self.cfg = cfg
         self.device = device
         self.stride = cfg['stride']
@@ -293,7 +322,7 @@ class YOWOMultiTask(nn.Module):
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
         self.topk = topk
-        self.end2end = end2end  # NMS-free mode
+        self.end2end = end2end
 
         # ==================== BACKBONE ====================
         self.backbone_2d, bk_dim_2d = build_backbone_2d(
@@ -318,36 +347,36 @@ class YOWOMultiTask(nn.Module):
 
         head_dim = cfg['head_dim']
         
-        # ==================== CASCADE PREDICTIONS ====================
+        # ==================== PREDICTIONS ====================
         
-        # Confidence (same as original YOWO)
+        # Confidence (objectness - CRITICAL for attention gating!)
         self.conf_preds = nn.ModuleList(
             [nn.Conv2d(head_dim, 1, kernel_size=1)
                 for _ in range(len(cfg['stride']))]) 
         
-        # 1. Object Head (first in cascade)
+        # 1. Object Head
         self.obj_preds = nn.ModuleList(
             [nn.Conv2d(head_dim, num_objects, kernel_size=1)
                 for _ in range(len(cfg['stride']))]) 
         
-        # Object → Relation context
+        # Object → Relation context (V2 - uses confidence!)
         self.obj_context = nn.ModuleList([
-            ObjectContext(head_dim, num_objects)
+            ObjectContextModuleV2(head_dim, num_objects)
             for _ in range(len(cfg['stride']))
         ])
         
-        # 2. Relation Head (second in cascade)
+        # 2. Relation Head
         self.rel_preds = nn.ModuleList(
             [nn.Conv2d(head_dim, num_relations, kernel_size=1)
                 for _ in range(len(cfg['stride']))]) 
         
-        # Relation → Action context
+        # Relation → Action context (V2 - uses confidence!)
         self.rel_context = nn.ModuleList([
-            RelationContext(head_dim, num_objects, num_relations)
+            SceneContextAttentionV2(head_dim, num_objects, num_relations)
             for _ in range(len(cfg['stride']))
         ])
         
-        # 3. Action Head (last in cascade)
+        # 3. Action Head
         self.act_preds = nn.ModuleList(
             [nn.Conv2d(head_dim, num_actions, kernel_size=1)
                 for _ in range(len(cfg['stride']))]) 
@@ -358,7 +387,6 @@ class YOWOMultiTask(nn.Module):
                 for _ in range(len(cfg['stride']))])
 
         # ==================== ONE-TO-ONE HEADS (NMS-FREE) ====================
-        # Duplicate heads for O2O - trained with topk=1 matcher
         if self.end2end:
             self.o2o_conf_preds = copy.deepcopy(self.conf_preds)
             self.o2o_obj_preds = copy.deepcopy(self.obj_preds)
@@ -405,10 +433,11 @@ class YOWOMultiTask(nn.Module):
 
 
     def _forward_single_level(self, level, cls_feat, reg_feat, feat_3d_up, use_o2o=False):
-        """Process single FPN level with full cascade.
+        """
+        FIXED: Cascade now passes confidence to context modules.
         
-        Args:
-            use_o2o: If True, use One-to-One heads (for NMS-free inference)
+        This allows attention to focus ONLY on positions where objects
+        are actually detected (high confidence), not background.
         """
         # Encode
         cls_feat = self.cls_channel_encoders[level](cls_feat, feat_3d_up)
@@ -435,23 +464,24 @@ class YOWOMultiTask(nn.Module):
             act_pred = self.act_preds[level]
             reg_pred = self.reg_preds[level]
         
-        # ===== CASCADE: Object → Relation → Action =====
+        # ===== FIXED CASCADE: Object → Relation → Action =====
+        # Now passes confidence to context modules!
+        
+        # 0. Confidence prediction (EARLY - needed for context gating!)
+        conf_logits = conf_pred(reg_feat)  # [B, 1, H, W]
         
         # 1. Object prediction
         obj_logits = obj_pred(cls_feat)
         
-        # 2. Relation prediction (with object context)
-        rel_feat = obj_ctx(cls_feat, obj_logits)
+        # 2. Relation prediction (with CONFIDENCE-GATED object context)
+        rel_feat = obj_ctx(cls_feat, obj_logits, conf_logits)  # V2: passes conf!
         rel_logits = rel_pred(rel_feat)
         
-        # 3. Action prediction (with object + relation context)
-        # NOTE: Use cls_feat (original features) as base, like old architecture
-        # The context module attends to obj+rel predictions for enrichment
-        act_feat = rel_ctx(cls_feat, obj_logits, rel_logits)
+        # 3. Action prediction (with CONFIDENCE-GATED object + relation context)
+        act_feat = rel_ctx(cls_feat, obj_logits, rel_logits, conf_logits)  # V2: passes conf!
         act_logits = act_pred(act_feat)
         
-        # Confidence and box
-        conf_logits = conf_pred(reg_feat)
+        # Box regression
         reg_output = reg_pred(reg_feat)
         
         return conf_logits, obj_logits, rel_logits, act_logits, reg_output
@@ -508,7 +538,6 @@ class YOWOMultiTask(nn.Module):
         all_reg = []
         all_anchors = []
         
-        # Use O2O heads if end2end mode (NMS-free inference)
         use_o2o = self.end2end
         
         for level, (cls_f, reg_f) in enumerate(zip(cls_feats, reg_feats)):
@@ -520,19 +549,16 @@ class YOWOMultiTask(nn.Module):
             fmp_size = conf_l.shape[-2:]
             anchors = self.generate_anchors(fmp_size, self.stride[level])
             
-            # Reshape
             conf_l = conf_l.permute(0, 2, 3, 1).contiguous().view(B, -1, 1)
             obj_l = obj_l.permute(0, 2, 3, 1).contiguous().view(B, -1, self.num_objects)
             rel_l = rel_l.permute(0, 2, 3, 1).contiguous().view(B, -1, self.num_relations)
             act_l = act_l.permute(0, 2, 3, 1).contiguous().view(B, -1, self.num_actions)
             reg_l = reg_l.permute(0, 2, 3, 1).contiguous().view(B, -1, 4)
             
-            # Activations
             obj_l = F.softmax(obj_l, dim=-1)
             rel_l = torch.sigmoid(rel_l)
             act_l = torch.sigmoid(act_l)
             
-            # Combined class output: [obj, act, rel] to match label format
             cls_l = torch.cat([obj_l, act_l, rel_l], dim=-1)
             
             all_conf.append(conf_l)
@@ -543,7 +569,6 @@ class YOWOMultiTask(nn.Module):
         batch_bboxes = []
         for b in range(B):
             if self.end2end:
-                # NMS-FREE post-processing for O2O head
                 out = self.post_process_nms_free(
                     [c[b] for c in all_conf],
                     [c[b] for c in all_cls],
@@ -551,7 +576,6 @@ class YOWOMultiTask(nn.Module):
                     all_anchors
                 )
             else:
-                # Standard post-processing with NMS
                 out = self.post_process(
                     [c[b] for c in all_conf],
                     [c[b] for c in all_cls],
@@ -566,11 +590,7 @@ class YOWOMultiTask(nn.Module):
 
 
     def post_process_nms_free(self, conf_preds, cls_preds, reg_preds, anchors):
-        """NMS-free post-processing for O2O head.
-        
-        O2O head was trained to output single predictions per object,
-        so we just need confidence thresholding - NO NMS needed!
-        """
+        """NMS-free post-processing for O2O head."""
         all_conf = []
         all_cls = []
         all_box = []
@@ -598,7 +618,6 @@ class YOWOMultiTask(nn.Module):
         if len(conf) == 0:
             return np.zeros((0, 5 + self.num_classes))
         
-        # NO NMS! Just return the predictions directly
         scores = conf.cpu().numpy()
         labels = cls.cpu().numpy()
         bboxes = box.cpu().numpy()
@@ -614,12 +633,9 @@ class YOWOMultiTask(nn.Module):
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         
-        # ========== ONE-TO-MANY (O2M) FORWARD ==========
         o2m_outputs = self._forward_all_levels(cls_feats, reg_feats, feat_3d, use_o2o=False)
         
         if self.end2end:
-            # ========== ONE-TO-ONE (O2O) FORWARD ==========
-            # CRITICAL: Use DETACHED features to prevent gradient conflict!
             cls_feats_detach = [f.detach() for f in cls_feats]
             reg_feats_detach = [f.detach() for f in reg_feats]
             feat_3d_detach = feat_3d.detach()
@@ -653,7 +669,6 @@ class YOWOMultiTask(nn.Module):
             fmp_size = conf_l.shape[-2:]
             anchors = self.generate_anchors(fmp_size, self.stride[level])
             
-            # Reshape
             conf_l = conf_l.permute(0, 2, 3, 1).contiguous().flatten(1, 2)
             obj_l = obj_l.permute(0, 2, 3, 1).contiguous().flatten(1, 2)
             rel_l = rel_l.permute(0, 2, 3, 1).contiguous().flatten(1, 2)
@@ -679,3 +694,6 @@ class YOWOMultiTask(nn.Module):
             "strides": self.stride
         }
 
+
+# For backward compatibility - alias to old name
+YOWOMultiTask = YOWOMultiTaskV2
