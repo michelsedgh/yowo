@@ -221,17 +221,35 @@ def train():
     
     # Load or advance LR scheduler if resuming from checkpoint
     if start_epoch > 0 and args.resume is not None:
-        # Try to load saved scheduler state (most accurate)
         checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
+        restored = False
         if 'lr_scheduler' in checkpoint:
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            print(f'✅ Loaded LR scheduler state, current LR: {lr_scheduler.get_last_lr()[0]:.6f}')
-        else:
-            # Fallback: manually step scheduler for old checkpoints
-            print(f'Advancing LR scheduler by {start_epoch} epochs for resume...')
+            saved_milestones = checkpoint['lr_scheduler'].get('milestones', None)
+            # Only restore saved state if milestones match exactly (same training run)
+            # If milestones differ, the user changed lr_epoch, so we must NOT load the
+            # old state (it would import a stale decayed LR from the previous schedule).
+            if saved_milestones is not None:
+                # milestones in state_dict is a Counter; convert to sorted list for comparison
+                import collections
+                saved_list = sorted(saved_milestones.keys() if isinstance(saved_milestones, collections.Counter) else saved_milestones)
+                new_list = sorted(args.lr_epoch)
+                if saved_list == new_list:
+                    lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+                    print(f'✅ Loaded LR scheduler state (milestones match), current LR: {lr_scheduler.get_last_lr()[0]:.6f}')
+                    restored = True
+                else:
+                    print(f'⚠️  lr_epoch changed ({saved_list} → {new_list}): ignoring saved scheduler state.')
+            else:
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+                print(f'✅ Loaded LR scheduler state, current LR: {lr_scheduler.get_last_lr()[0]:.6f}')
+                restored = True
+        if not restored:
+            # Advance the new scheduler by start_epoch steps so its internal
+            # last_epoch counter is correct, but since new milestones haven't
+            # been reached yet the LR stays at base_lr.
             for _ in range(start_epoch):
                 lr_scheduler.step()
-            print(f'✅ Current Learning Rate: {lr_scheduler.get_last_lr()[0]:.6f}')
+            print(f'✅ LR scheduler advanced to epoch {start_epoch}, current LR: {lr_scheduler.get_last_lr()[0]:.6f}')
 
     # warmup scheduler
     warmup_scheduler = build_warmup(d_cfg, base_lr=base_lr)

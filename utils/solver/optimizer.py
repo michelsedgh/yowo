@@ -56,7 +56,16 @@ def build_optimizer(cfg, model, base_lr=0.0, resume=None):
         if "optimizer" in checkpoint:
             try:
                 optimizer.load_state_dict(checkpoint["optimizer"])
+                # Reset param_groups lr to base_lr: the saved optimizer state stores
+                # whatever LR was active when the checkpoint was saved (possibly decayed).
+                # The LR scheduler in train.py will set the correct LR after its own
+                # milestone check, but we must start from base_lr so a changed lr_epoch
+                # schedule doesn't silently inherit a stale decayed LR.
+                for pg in optimizer.param_groups:
+                    pg['lr'] = base_lr
+                    pg['initial_lr'] = base_lr
                 print('✅ Loaded optimizer state (momentum buffers preserved)')
+                print(f'   LR reset to base_lr: {base_lr:.6f}')
             except Exception as e:
                 print(f'⚠️ Could not load optimizer state: {e}')
                 print('   Starting with fresh optimizer (this is normal if model architecture changed)')
