@@ -161,7 +161,7 @@ def build_dataset(d_cfg, args, is_train=False):
             transform=basetransform,
             collate_fn=CollateFunc(),
             conf_thresh=args.conf_thresh,
-            iou_thresh=args.nms_thresh,
+            iou_thresh=getattr(args, 'iou_thresh', 0.5),
             save_path='./evaluator/eval_results/',
             smart_home_config=smart_home_config
         )

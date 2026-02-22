@@ -30,265 +30,111 @@ from .head import build_head
 from utils.nms import multiclass_nms
 
 
-class ObjectContextModuleV2(nn.Module):
+class LocalContextModule(nn.Module):
     """
-    FIXED: Object context with confidence-gated attention.
+    Simple local context: pool nearby object predictions to enrich features.
     
-    Now receives conf_logits to know WHERE objects actually exist.
-    Attention only focuses on positions with high objectness confidence.
+    Uses 5x5 avg_pool of confidence-weighted object probabilities.
+    No attention mechanism, no presence_bias — just "what objects are near me?"
+    
+    This replaced the broken ObjectContextModuleV2 which used attention with
+    presence_bias = (conf - 0.3) * 8.0 that suppressed person features.
     """
     def __init__(self, dim=256, num_classes=36, num_heads=4):
         super().__init__()
         self.dim = dim
         self.num_classes = num_classes
         self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
-        
-        # Query: from classification features
-        self.q_proj = nn.Conv2d(dim, dim, kernel_size=1)
-        
-        # Key: from CONFIDENCE-WEIGHTED object predictions
-        # Input: obj_probs * conf (grounded predictions)
-        self.k_proj = nn.Sequential(
+        # Simple projection: object probs → feature space
+        self.context_proj = nn.Sequential(
             nn.Conv2d(num_classes, dim, kernel_size=1),
             nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1),
         )
-        
-        # Value: object information to aggregate
-        self.v_proj = nn.Sequential(
-            nn.Conv2d(num_classes, dim, kernel_size=1),
-            nn.GELU(),
-        )
-        
-        # Relative position bias
-        max_size = 32
-        self.rel_pos_bias = nn.Parameter(torch.zeros(num_heads, 2*max_size-1, 2*max_size-1))
-        nn.init.trunc_normal_(self.rel_pos_bias, std=0.02)
-        
-        # Output projection
-        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
         self.norm = nn.GroupNorm(32, dim)
-        
-        nn.init.xavier_uniform_(self.q_proj.weight, gain=1.0)
-        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.5)
-    
-    def get_rel_pos_bias(self, H, W, device):
-        """Generate relative position bias for H x W grid."""
-        coords_h = torch.arange(H, device=device)
-        coords_w = torch.arange(W, device=device)
-        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))
-        coords_flat = coords.reshape(2, -1)
-        
-        rel_coords = coords_flat[:, :, None] - coords_flat[:, None, :]
-        rel_coords = rel_coords.permute(1, 2, 0).contiguous()
-        
-        rel_coords[:, :, 0] += self.rel_pos_bias.shape[1] // 2
-        rel_coords[:, :, 1] += self.rel_pos_bias.shape[2] // 2
-        rel_coords = rel_coords.clamp(0, self.rel_pos_bias.shape[1] - 1)
-        
-        rel_pos_idx = rel_coords[:, :, 0] * self.rel_pos_bias.shape[2] + rel_coords[:, :, 1]
-        rel_pos_idx = rel_pos_idx.long()
-        
-        bias = self.rel_pos_bias.view(self.num_heads, -1)[:, rel_pos_idx.view(-1)]
-        bias = bias.view(self.num_heads, H*W, H*W)
-        
-        return bias
+        self.pool_size = 5  # local neighborhood size
     
     def forward(self, cls_feat, obj_logits, conf_logits, return_weights=False):
         """
-        FIXED: Now uses confidence to weight object predictions.
+        Enrich features with local object context.
         
-        Args:
-            cls_feat: [B, C, H, W] - features 
-            obj_logits: [B, 36, H, W] - object class predictions (logits)
-            conf_logits: [B, 1, H, W] - objectness confidence (logits)
-        Returns:
-            context_feat: [B, C, H, W] - features enriched with spatial object context
+        For each position, pools nearby confidence-weighted object predictions
+        to answer: "what objects are near me?"
         """
-        B, C, H, W = cls_feat.shape
-        N = H * W
+        # Detach predictions: don't let context gradients destabilize obj/conf heads
+        obj_probs = F.softmax(obj_logits.detach(), dim=1)  # [B, 36, H, W]
+        conf = torch.sigmoid(conf_logits.detach())          # [B, 1, H, W]
         
-        # Convert to probabilities
-        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
-        conf = torch.sigmoid(conf_logits)  # [B, 1, H, W] - true objectness!
-        
-        # CRITICAL FIX: Weight object probs by confidence
-        # Background positions (low conf) → all object probs suppressed
-        # Object positions (high conf) → object probs preserved
+        # Confidence-weighted object presence
         grounded_obj = obj_probs * conf  # [B, 36, H, W]
         
-        # Project Q, K, V
-        Q = self.q_proj(cls_feat)
-        K = self.k_proj(grounded_obj)  # Now uses confidence-weighted predictions!
-        V = self.v_proj(grounded_obj)
+        # Pool from local neighborhood: "what objects are near this position?"
+        local_obj = F.avg_pool2d(
+            grounded_obj, self.pool_size, stride=1, padding=self.pool_size // 2
+        )  # [B, 36, H, W]
         
-        # Reshape for multi-head attention
-        Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        
-        # Attention scores
-        attn = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
-        
-        # Relative position bias
-        rel_pos_bias = self.get_rel_pos_bias(H, W, cls_feat.device)
-        attn = attn + rel_pos_bias.unsqueeze(0)
-        
-        # CRITICAL FIX: Use CONFIDENCE as presence bias (not obj_probs.max())
-        # conf already tells us where objects are detected
-        conf_flat = conf.view(B, 1, 1, N)  # [B, 1, 1, N]
-        presence_bias = (conf_flat - 0.3) * 8.0  # Strong bias: conf>0.3 → attend, else suppress
-        attn = attn + presence_bias
-        
-        # Softmax
-        attn_weights = F.softmax(attn, dim=-1)
-        
-        # Apply attention
-        out = torch.matmul(attn_weights, V)
-        out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
-        
-        # Output projection + residual
-        out = self.out_proj(out)
-        out = self.norm(cls_feat + out)
+        # Project to feature space and add via residual
+        context = self.context_proj(local_obj)  # [B, C, H, W]
+        out = self.norm(cls_feat + context)
         
         if return_weights:
-            return out, attn_weights.mean(dim=1)
+            return out, None
         return out
 
 
-class SceneContextAttentionV2(nn.Module):
+class CascadeContextModule(nn.Module):
     """
-    FIXED: Scene context with confidence-gated attention.
+    Simple cascade context: pool nearby object + relation predictions.
     
-    For action prediction, attends to positions where objects AND relations
-    are actually detected (not just raw softmax probabilities).
+    For action prediction: "what objects and relations are near this position?"
+    Uses local pooling instead of attention — proven to not hurt features.
     """
     def __init__(self, dim=256, num_objects=36, num_relations=26, num_heads=4):
         super().__init__()
-        self.dim = dim
-        self.num_objects = num_objects
-        self.num_relations = num_relations
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
-        
-        # Query: from classification features
-        self.q_proj = nn.Conv2d(dim, dim, kernel_size=1)
-        
-        # Key/Value: from confidence-weighted object + relation predictions
-        self.k_proj = nn.Sequential(
+        self.context_proj = nn.Sequential(
             nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
             nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1),
         )
-        self.v_proj = nn.Sequential(
-            nn.Conv2d(num_objects + num_relations, dim, kernel_size=1),
-            nn.GELU(),
-        )
-        
-        # Relative position bias
-        max_size = 32
-        self.rel_pos_bias = nn.Parameter(torch.zeros(num_heads, 2*max_size-1, 2*max_size-1))
-        nn.init.trunc_normal_(self.rel_pos_bias, std=0.02)
-        
-        # Output projection
-        self.out_proj = nn.Conv2d(dim, dim, kernel_size=1)
         self.norm = nn.GroupNorm(32, dim)
-        
-        nn.init.xavier_uniform_(self.q_proj.weight, gain=1.0)
-        nn.init.xavier_uniform_(self.out_proj.weight, gain=0.5)
-    
-    def get_rel_pos_bias(self, H, W, device):
-        coords_h = torch.arange(H, device=device)
-        coords_w = torch.arange(W, device=device)
-        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing='ij'))
-        coords_flat = coords.reshape(2, -1)
-        
-        rel_coords = coords_flat[:, :, None] - coords_flat[:, None, :]
-        rel_coords = rel_coords.permute(1, 2, 0).contiguous()
-        
-        rel_coords[:, :, 0] += self.rel_pos_bias.shape[1] // 2
-        rel_coords[:, :, 1] += self.rel_pos_bias.shape[2] // 2
-        rel_coords = rel_coords.clamp(0, self.rel_pos_bias.shape[1] - 1)
-        
-        rel_pos_idx = rel_coords[:, :, 0] * self.rel_pos_bias.shape[2] + rel_coords[:, :, 1]
-        rel_pos_idx = rel_pos_idx.long()
-        
-        bias = self.rel_pos_bias.view(self.num_heads, -1)[:, rel_pos_idx.view(-1)]
-        bias = bias.view(self.num_heads, H*W, H*W)
-        
-        return bias
+        self.pool_size = 5
     
     def forward(self, cls_feat, obj_logits, rel_logits, conf_logits, return_weights=False):
         """
-        FIXED: Now uses confidence to weight context.
-        
-        Args:
-            cls_feat: [B, C, H, W] - features
-            obj_logits: [B, 36, H, W] - object predictions (logits)
-            rel_logits: [B, 26, H, W] - relation predictions (logits)
-            conf_logits: [B, 1, H, W] - objectness confidence (logits)
-        Returns:
-            context_feat: [B, C, H, W] - features with spatial object+relation context
+        Enrich features with local object + relation context.
         """
-        B, C, H, W = cls_feat.shape
-        N = H * W
+        # Detach: don't let action gradients destabilize obj/rel/conf heads
+        obj_probs = F.softmax(obj_logits.detach(), dim=1)  # [B, 36, H, W]
+        rel_probs = torch.sigmoid(rel_logits.detach())      # [B, 26, H, W]
+        conf = torch.sigmoid(conf_logits.detach())           # [B, 1, H, W]
         
-        # Convert to probabilities
-        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
-        rel_probs = torch.sigmoid(rel_logits)     # [B, 26, H, W]
-        conf = torch.sigmoid(conf_logits)         # [B, 1, H, W]
+        # Confidence-weighted
+        grounded = torch.cat([
+            obj_probs * conf,  # [B, 36, H, W]
+            rel_probs * conf,  # [B, 26, H, W]
+        ], dim=1)  # [B, 62, H, W]
         
-        # CRITICAL FIX: Weight by confidence
-        grounded_obj = obj_probs * conf  # [B, 36, H, W]
-        grounded_rel = rel_probs * conf  # [B, 26, H, W]
+        # Pool from local neighborhood
+        local_ctx = F.avg_pool2d(
+            grounded, self.pool_size, stride=1, padding=self.pool_size // 2
+        )
         
-        # Combine grounded context
-        context_probs = torch.cat([grounded_obj, grounded_rel], dim=1)  # [B, 62, H, W]
-        
-        # Project Q, K, V
-        Q = self.q_proj(cls_feat)
-        K = self.k_proj(context_probs)
-        V = self.v_proj(context_probs)
-        
-        # Reshape for multi-head attention
-        Q = Q.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        K = K.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        V = V.view(B, self.num_heads, self.head_dim, N).permute(0, 1, 3, 2)
-        
-        # Attention scores
-        attn = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
-        
-        # Relative position bias
-        rel_pos_bias = self.get_rel_pos_bias(H, W, cls_feat.device)
-        attn = attn + rel_pos_bias.unsqueeze(0)
-        
-        # CRITICAL FIX: Use confidence as presence bias
-        conf_flat = conf.view(B, 1, 1, N)
-        presence_bias = (conf_flat - 0.3) * 8.0
-        attn = attn + presence_bias
-        
-        # Softmax
-        attn_weights = F.softmax(attn, dim=-1)
-        
-        # Apply attention
-        out = torch.matmul(attn_weights, V)
-        out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
-        
-        # Output projection + residual
-        out = self.out_proj(out)
-        out = self.norm(cls_feat + out)
+        # Project and residual
+        context = self.context_proj(local_ctx)
+        out = self.norm(cls_feat + context)
         
         if return_weights:
-            return out, attn_weights.mean(dim=1)
+            return out, None
         return out
 
 
-# Keep aliases for backward compatibility with old names
-ObjectContextModule = ObjectContextModuleV2
-SceneContextAttention = SceneContextAttentionV2  
-ObjectContext = ObjectContextModuleV2
-RelationContext = SceneContextAttentionV2
+# Aliases for model building code
+ObjectContextModuleV2 = LocalContextModule
+SceneContextAttentionV2 = CascadeContextModule
+ObjectContextModule = LocalContextModule
+SceneContextAttention = CascadeContextModule
+ObjectContext = LocalContextModule
+RelationContext = CascadeContextModule
 
 
 class YOWOMultiTaskV2(nn.Module):
@@ -388,14 +234,19 @@ class YOWOMultiTaskV2(nn.Module):
 
         # ==================== ONE-TO-ONE HEADS (NMS-FREE) ====================
         if self.end2end:
+            # O2O only needs separate conf (anchor selection) and reg (box position).
+            # Classification heads (obj, act, rel + context) are SHARED with O2M.
+            # This way the action head gets rich O2M supervision (7+ person anchors/img)
+            # instead of starving on O2O's topk=1 (1 person anchor/img).
             self.o2o_conf_preds = copy.deepcopy(self.conf_preds)
-            self.o2o_obj_preds = copy.deepcopy(self.obj_preds)
-            self.o2o_obj_context = copy.deepcopy(self.obj_context)
-            self.o2o_rel_preds = copy.deepcopy(self.rel_preds)
-            self.o2o_rel_context = copy.deepcopy(self.rel_context)
-            self.o2o_act_preds = copy.deepcopy(self.act_preds)
             self.o2o_reg_preds = copy.deepcopy(self.reg_preds)
-            print("End-to-End NMS-Free Mode: ENABLED (dual O2M + O2O heads)")
+            # Shared (just aliases, same weights):
+            self.o2o_obj_preds = self.obj_preds
+            self.o2o_obj_context = self.obj_context
+            self.o2o_rel_preds = self.rel_preds
+            self.o2o_rel_context = self.rel_context
+            self.o2o_act_preds = self.act_preds
+            print("End-to-End NMS-Free Mode: ENABLED (shared cls heads, separate conf/reg)")
 
         self.init_yowo()
 

@@ -216,22 +216,21 @@ class MultiTaskCriterion(object):
                 # Split labels
                 matched_labels = tgt_labels[matched_gt_inds]
                 
+                # Actions & Relations: IoU-weighted soft targets with floor
+                # pred_ious are ~0.79 at epoch 14, so the floor mostly matters
+                # for early training when box predictions are still rough.
+                
                 # Object: argmax (exclusive class)
                 obj_target = matched_labels[:, :self.num_objects].argmax(dim=-1)
                 
-                # Actions: use IoU weighting only for BCE, not Focal Loss
-                # Focal Loss works better with hard targets (0/1) - it handles difficulty via modulation
-                # BCE with soft labels (IoU-weighted) gives quality-aware supervision
                 act_target = matched_labels[:, self.num_objects:self.num_objects+self.num_actions]
-                if not self.use_focal_loss:
-                    # IoU weighting for BCE (soft labels)
-                    act_target = act_target * pred_ious.unsqueeze(-1)
-                # else: keep hard targets for Focal Loss
+                iou_weight = pred_ious.clamp(min=0.3).unsqueeze(-1)
+                act_target = act_target * iou_weight
                 
-                # Relations: same logic
+                # Relations: same IoU-weighted soft targets with floor
                 rel_target = matched_labels[:, self.num_objects+self.num_actions:]
-                if not self.use_focal_loss:
-                    rel_target = rel_target * pred_ious.unsqueeze(-1)
+                rel_target = rel_target * iou_weight
+
                 
                 # Person mask: object class 0 is "person" - for action loss masking
                 is_person_mask = (obj_target == 0)

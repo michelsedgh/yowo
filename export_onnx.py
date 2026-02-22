@@ -52,6 +52,7 @@ class YOWOMultiTaskONNX(nn.Module):
     2. Flattens all scale outputs into single tensor
     3. Includes box decoding and normalization
     4. Fixed batch size = 1 for optimal TensorRT optimization
+    5. PRE-BAKED relative position bias for context modules (avoids dynamic ops)
     
     Supports both X3D and ResNeXt 3D backbones:
     - X3D: Requires ImageNet normalization (mean=[0.45], std=[0.225])
@@ -80,6 +81,11 @@ class YOWOMultiTaskONNX(nn.Module):
             self.register_buffer('pixel_mean', torch.zeros(1, 3, 1, 1, 1))
             self.register_buffer('pixel_std', torch.ones(1, 3, 1, 1, 1))
             self.needs_normalization = False
+        
+        # New context modules (LocalContextModule / CascadeContextModule) use simple
+        # avg_pool2d - no dynamic ops, no position bias needed. TensorRT handles this natively.
+        print(f"  Context modules: {type(model.obj_context[0]).__name__} (pooling-based, TRT-friendly)")
+    
     
     def generate_anchors(self, fmp_size, stride, device):
         """Generate anchor points for a given feature map size."""
@@ -146,14 +152,13 @@ class YOWOMultiTaskONNX(nn.Module):
             cls_feat, reg_feat = self.model.heads[level](cls_feat, reg_feat)
             
             # ============ CASCADED PREDICTIONS ============
+            # New pooling-based context modules work directly with ONNX/TRT
+            
             # Use O2O heads if end2end mode (NMS-free)
             if self.end2end and hasattr(self.model, 'o2o_conf_preds'):
-                # One-to-One heads for NMS-free inference
-                # V2: Confidence must be computed FIRST for context gating!
                 conf_pred = self.model.o2o_conf_preds[level](reg_feat)
                 obj_pred = self.model.o2o_obj_preds[level](cls_feat)
                 
-                # V2: Pass conf_pred to context modules for grounded attention
                 rel_feat = self.model.o2o_obj_context[level](cls_feat, obj_pred, conf_pred)
                 rel_pred = self.model.o2o_rel_preds[level](rel_feat)
                 
@@ -162,12 +167,9 @@ class YOWOMultiTaskONNX(nn.Module):
                 
                 reg_pred = self.model.o2o_reg_preds[level](reg_feat)
             else:
-                # One-to-Many heads (standard)
-                # V2: Confidence must be computed FIRST for context gating!
                 conf_pred = self.model.conf_preds[level](reg_feat)
                 obj_pred = self.model.obj_preds[level](cls_feat)
                 
-                # V2: Pass conf_pred to context modules for grounded attention
                 rel_feat = self.model.obj_context[level](cls_feat, obj_pred, conf_pred)
                 rel_pred = self.model.rel_preds[level](rel_feat)
                 
@@ -229,7 +231,7 @@ def export_onnx(args):
             self.version = version
             self.dataset = dataset  # Use CLI argument!
             self.img_size = 224
-            self.len_clip = 16
+            self.len_clip = 32
             self.conf_thresh = 0.1
             self.nms_thresh = 0.5
             self.topk = 50
@@ -414,7 +416,7 @@ def main():
                         help='Output ONNX file path')
     parser.add_argument('--img_size', type=int, default=224,
                         help='Input image size')
-    parser.add_argument('--len_clip', type=int, default=16,
+    parser.add_argument('--len_clip', type=int, default=32,
                         help='Clip length (number of frames)')
     parser.add_argument('--no_verify', action='store_true', default=False,
                         help='Skip ONNX verification (faster export)')

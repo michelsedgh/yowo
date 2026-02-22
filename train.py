@@ -74,10 +74,12 @@ def parse_args():
                         help='build YOWOv2')
     parser.add_argument('-r', '--resume', default=None, type=str,
                         help='keep training')
-    parser.add_argument('-ct', '--conf_thresh', default=0.1, type=float,
+    parser.add_argument('-ct', '--conf_thresh', default=0.05, type=float,
                         help='confidence threshold. We suggest 0.005 for UCF24 and 0.1 for AVA.')
     parser.add_argument('-nt', '--nms_thresh', default=0.5, type=float,
                         help='NMS threshold. We suggest 0.5 for UCF24 and AVA.')
+    parser.add_argument('--iou_thresh', default=0.5, type=float,
+                        help='IoU threshold for evaluation box matching. 0.5 standard, 0.3 for smart home.')
     parser.add_argument('--topk', default=40, type=int,
                         help='topk prediction candidates.')
     parser.add_argument('-K', '--len_clip', default=16, type=int,

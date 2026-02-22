@@ -335,11 +335,13 @@ class CharadesAGEvaluator:
                         continue
                     
                     # Rescale detection boxes to original size
+                    # Model outputs [0,1] normalized coords in square space
+                    # Must scale x by width, y by height (same as GT)
                     box_scaled = np.zeros(4)
-                    box_scaled[0] = box[0] * max(orig_size)
-                    box_scaled[1] = box[1] * max(orig_size)
-                    box_scaled[2] = box[2] * max(orig_size)
-                    box_scaled[3] = box[3] * max(orig_size)
+                    box_scaled[0] = box[0] * orig_size[1]  # x1 * width
+                    box_scaled[1] = box[1] * orig_size[0]  # y1 * height
+                    box_scaled[2] = box[2] * orig_size[1]  # x2 * width
+                    box_scaled[3] = box[3] * orig_size[0]  # y2 * height
                     
                     all_det[frame_id].append((box_scaled, conf, labels))
             

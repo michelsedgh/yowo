@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOWO Training Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --green: #3fb950;
+            --red: #f85149;
+            --blue: #58a6ff;
+            --purple: #a371f7;
+            --orange: #d29922;
+            --cyan: #39c5cf;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 1900px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+
+        .import-box {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .import-box textarea {
+            width: 100%;
+            height: 80px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .btn-green {
+            background: var(--green);
+            color: #000;
+        }
+
+        .btn-red {
+            background: var(--red);
+            color: #fff;
+        }
+
+        #status {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 8px 14px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 5px;
+        }
+
+        .tab:hover {
+            color: var(--text);
+        }
+
+        .tab.active {
+            background: var(--blue);
+            color: #000;
+            border-color: var(--blue);
+        }
+
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .summary-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .summary-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 14px;
+        }
+
+        .summary-label {
+            font-size: 9px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-value {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .summary-trend {
+            font-size: 10px;
+        }
+
+        .up {
+            color: var(--green);
+        }
+
+        .down {
+            color: var(--red);
+        }
+
+        .search-row {
+            margin-bottom: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-row input {
+            padding: 6px 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-size: 12px;
+            width: 200px;
+        }
+
+        .search-row select {
+            padding: 6px 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-size: 12px;
+        }
+
+        /* Grid of cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        /* Item Card with mini chart */
+        .item-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .item-name {
+            font-size: 12px;
+            font-weight: 600;
+            max-width: 70%;
+            line-height: 1.3;
+        }
+
+        .item-current {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .item-trend {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .item-trend.up {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--green);
+        }
+
+        .item-trend.down {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--red);
+        }
+
+        .item-trend.same {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--muted);
+        }
+
+        /* Mini bar chart */
+        .mini-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 60px;
+            margin-top: 8px;
+        }
+
+        .bar-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .bar {
+            width: 100%;
+            border-radius: 2px 2px 0 0;
+            min-height: 2px;
+        }
+
+        .bar-label {
+            font-size: 8px;
+            color: var(--muted);
+            margin-top: 2px;
+            white-space: nowrap;
+        }
+
+        .bar-value {
+            font-size: 9px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat {
+            flex: 1;
+        }
+
+        .stat-label {
+            font-size: 8px;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--muted);
+        }
+
+        /* Color by value */
+        .c-great {
+            color: var(--green);
+        }
+
+        .c-good {
+            color: var(--cyan);
+        }
+
+        .c-ok {
+            color: var(--orange);
+        }
+
+        .c-bad {
+            color: var(--red);
+        }
+
+        .bg-great {
+            background: var(--green);
+        }
+
+        .bg-good {
+            background: var(--cyan);
+        }
+
+        .bg-ok {
+            background: var(--orange);
+        }
+
+        .bg-bad {
+            background: var(--red);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 YOWO Training Progress</h1>
+
+        <div class="import-box">
+            <textarea id="input" placeholder="Paste ALL epoch outputs here"></textarea>
+            <div class="btn-row">
+                <button class="btn btn-green" onclick="importData()">📥 Import</button>
+                <button class="btn btn-red" onclick="clearAll()">🗑️ Clear</button>
+                <span id="status"></span>
+            </div>
+        </div>
+
+        <div class="summary-row" id="summary"></div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="overview">📊 Overview</div>
+            <div class="tab" data-tab="actions">🎬 Actions (42)</div>
+            <div class="tab" data-tab="relations">🔗 Relations (26)</div>
+            <div class="tab" data-tab="objects">📦 Objects (36)</div>
+        </div>
+
+        <div class="panel active" id="overview-panel">
+            <div class="card-grid" id="overview-grid"></div>
+        </div>
+
+        <div class="panel" id="actions-panel">
+            <div class="search-row">
+                <input type="text" id="action-search" placeholder="🔍 Search...">
+                <select id="action-sort">
+                    <option value="f1-desc">Best F1</option>
+                    <option value="f1-asc">Worst F1</option>
+                    <option value="change-desc">Most Improved</option>
+                    <option value="change-asc">Most Declined</option>
+                    <option value="name">Alphabetical</option>
+                </select>
+            </div>
+            <div class="card-grid" id="actions-grid"></div>
+        </div>
+
+        <div class="panel" id="relations-panel">
+            <div class="search-row">
+                <input type="text" id="relation-search" placeholder="🔍 Search...">
+                <select id="relation-sort">
+                    <option value="f1-desc">Best F1</option>
+                    <option value="f1-asc">Worst F1</option>
+                    <option value="change-desc">Most Improved</option>
+                    <option value="name">Alphabetical</option>
+                </select>
+            </div>
+            <div class="card-grid" id="relations-grid"></div>
+        </div>
+
+        <div class="panel" id="objects-panel">
+            <div class="search-row">
+                <input type="text" id="object-search" placeholder="🔍 Search...">
+                <select id="object-sort">
+                    <option value="acc-desc">Best Accuracy</option>
+                    <option value="acc-asc">Worst Accuracy</option>
+                    <option value="name">Alphabetical</option>
+                </select>
+            </div>
+            <div class="card-grid" id="objects-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        let epochs = [];
+
+        function parseEpochs(text) {
+            const results = [];
+            const blocks = text.split(/(?=SMART HOME EVALUATION|🏠 SMART HOME)/i);
+
+            for (const block of blocks) {
+                if (!block.trim()) continue;
+                const em = block.match(/Epoch\s*(\d+)/i);
+                if (!em) continue;
+
+                const ep = { epoch: parseInt(em[1]), summary: {}, actions: [], relations: [], objects: [] };
+
+                // Summary
+                [['boxMatch', /Box Match:\s*([\d.]+)%/], ['personMatch', /Person Match:\s*([\d.]+)%/],
+                ['objectAcc', /Object Acc:\s*([\d.]+)%/], ['actionF1', /Action F1:\s*([\d.]+)%/],
+                ['actionTop1', /Action Top-1:\s*([\d.]+)%/], ['relationF1', /Relation F1:\s*([\d.]+)%/]
+                ].forEach(([k, p]) => { const m = block.match(p); if (m) ep.summary[k] = parseFloat(m[1]); });
+
+                // Actions
+                const at = block.match(/PER-ACTION BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
+                if (at) for (const row of at[1].trim().split('\n')) {
+                    const m = row.match(/^\s*(.+?)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)%\s+(\d+)%\s+(\d+)%/);
+                    if (m) ep.actions.push({ name: m[1].trim(), gt: +m[2], p: +m[5], r: +m[6], f1: +m[7] });
+                }
+
+                // Relations
+                const rt = block.match(/PER-RELATION BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
+                if (rt) for (const row of rt[1].trim().split('\n')) {
+                    const m = row.match(/^\s*(\w+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)%\s+(\d+)%\s+(\d+)%/);
+                    if (m) ep.relations.push({ name: m[1], gt: +m[2], p: +m[5], r: +m[6], f1: +m[7] });
+                }
+
+                // Objects
+                const ot = block.match(/PER-OBJECT BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
+                if (ot) for (const row of ot[1].trim().split('\n')) {
+                    const m = row.match(/^\s*(\w+)\s+(\d+)\s+(\d+)\s+([\d.]+)%\s+([\d.]+)/);
+                    if (m) ep.objects.push({ name: m[1], gt: +m[2], correct: +m[3], acc: parseFloat(m[4]), conf: parseFloat(m[5]) });
+                }
+
+                if (ep.actions.length || ep.summary.boxMatch) results.push(ep);
+            }
+            return results.sort((a, b) => a.epoch - b.epoch);
+        }
+
+        function importData() {
+            const parsed = parseEpochs(document.getElementById('input').value);
+            if (!parsed.length) { document.getElementById('status').textContent = '❌ No epochs found'; return; }
+            for (const ep of parsed) { const i = epochs.findIndex(e => e.epoch === ep.epoch); if (i >= 0) epochs[i] = ep; else epochs.push(ep); }
+            epochs.sort((a, b) => a.epoch - b.epoch);
+            localStorage.setItem('yowo', JSON.stringify(epochs));
+            document.getElementById('status').textContent = `✅ ${parsed.length} epoch(s). Total: ${epochs.length}`;
+            document.getElementById('input').value = '';
+            render();
+        }
+
+        function clearAll() { if (!confirm('Clear?')) return; epochs = []; localStorage.removeItem('yowo'); render(); }
+
+        function colorClass(v) { return v >= 70 ? 'great' : v >= 50 ? 'good' : v >= 30 ? 'ok' : 'bad'; }
+
+        function getHistory(name, type) {
+            return epochs.map(e => {
+                const items = type === 'action' ? e.actions : type === 'relation' ? e.relations : e.objects;
+                const item = items.find(i => i.name === name);
+                return item ? (type === 'object' ? item.acc : item.f1) : null;
+            });
+        }
+
+        function getLatest(name, type) {
+            for (let i = epochs.length - 1; i >= 0; i--) {
+                const items = type === 'action' ? epochs[i].actions : type === 'relation' ? epochs[i].relations : epochs[i].objects;
+                const item = items.find(x => x.name === name);
+                if (item) return item;
+            }
+            return null;
+        }
+
+        function calcChange(history) {
+            const vals = history.filter(v => v !== null);
+            if (vals.length < 2) return 0;
+            return vals[vals.length - 1] - vals[0];
+        }
+
+        function miniChart(history, color) {
+            const max = Math.max(...history.filter(v => v !== null), 1);
+            return `<div class="mini-chart">${history.map((v, i) => {
+                if (v === null) return `<div class="bar-group"><div class="bar-value">-</div><div class="bar bg-bad" style="height:2px"></div><div class="bar-label">E${epochs[i]?.epoch || '?'}</div></div>`;
+                const h = Math.max(4, (v / 100) * 55);
+                return `<div class="bar-group"><div class="bar-value c-${colorClass(v)}">${v}%</div><div class="bar bg-${colorClass(v)}" style="height:${h}px"></div><div class="bar-label">E${epochs[i].epoch}</div></div>`;
+            }).join('')}</div>`;
+        }
+
+        function itemCard(name, type) {
+            const history = getHistory(name, type);
+            const latest = getLatest(name, type);
+            const current = history.filter(v => v !== null).slice(-1)[0] || 0;
+            const change = calcChange(history);
+            const trendClass = change > 0 ? 'up' : change < 0 ? 'down' : 'same';
+            const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+
+            let stats = '';
+            if (latest && type !== 'object') {
+                stats = `<div class="stats-row">
+            <div class="stat"><div class="stat-label">Precision</div><div class="stat-value">${latest.p}%</div></div>
+            <div class="stat"><div class="stat-label">Recall</div><div class="stat-value">${latest.r}%</div></div>
+            <div class="stat"><div class="stat-label">Samples</div><div class="stat-value">${latest.gt}</div></div>
+        </div>`;
+            } else if (latest && type === 'object') {
+                stats = `<div class="stats-row">
+            <div class="stat"><div class="stat-label">GT</div><div class="stat-value">${latest.gt}</div></div>
+            <div class="stat"><div class="stat-label">Correct</div><div class="stat-value">${latest.correct}</div></div>
+            <div class="stat"><div class="stat-label">Conf</div><div class="stat-value">${latest.conf.toFixed(3)}</div></div>
+        </div>`;
+            }
+
+            return `<div class="item-card" data-name="${name.toLowerCase()}" data-current="${current}" data-change="${change}">
+        <div class="item-header">
+            <div class="item-name">${name}</div>
+            <div>
+                <div class="item-current c-${colorClass(current)}">${current.toFixed(0)}%</div>
+                <div class="item-trend ${trendClass}">${arrow} ${Math.abs(change).toFixed(0)}%</div>
+            </div>
+        </div>
+        ${miniChart(history)}
+        ${stats}
+    </div>`;
+        }
+
+        function overviewCard(key, label, color) {
+            const history = epochs.map(e => e.summary[key] || 0);
+            const current = history[history.length - 1] || 0;
+            const first = history[0] || 0;
+            const change = current - first;
+            const trendClass = change > 0 ? 'up' : change < 0 ? 'down' : 'same';
+            const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+
+            return `<div class="item-card">
+        <div class="item-header">
+            <div class="item-name">${label}</div>
+            <div>
+                <div class="item-current" style="color:${color}">${current.toFixed(1)}%</div>
+                <div class="item-trend ${trendClass}">${arrow} ${Math.abs(change).toFixed(1)}%</div>
+            </div>
+        </div>
+        <div class="mini-chart">${history.map((v, i) => {
+                const h = Math.max(4, (v / 100) * 55);
+                return `<div class="bar-group"><div class="bar-value" style="color:${color}">${v.toFixed(0)}%</div><div class="bar" style="height:${h}px;background:${color}"></div><div class="bar-label">E${epochs[i].epoch}</div></div>`;
+            }).join('')}</div>
+    </div>`;
+        }
+
+        function render() {
+            renderSummary();
+            renderOverview();
+            renderItems('action');
+            renderItems('relation');
+            renderItems('object');
+        }
+
+        function renderSummary() {
+            const el = document.getElementById('summary');
+            if (!epochs.length) { el.innerHTML = ''; return; }
+            const first = epochs[0], last = epochs[epochs.length - 1];
+            const m = [['boxMatch', 'Box Match', 'var(--blue)'], ['personMatch', 'Person', 'var(--purple)'], ['actionF1', 'Action F1', 'var(--orange)'], ['relationF1', 'Relation F1', 'var(--cyan)'], ['objectAcc', 'Object Acc', 'var(--green)']];
+            el.innerHTML = m.map(([k, l, c]) => {
+                const curr = last.summary[k] || 0, start = first.summary[k] || 0, diff = curr - start;
+                return `<div class="summary-card"><div class="summary-label">${l}</div><div class="summary-value" style="color:${c}">${curr.toFixed(1)}%</div><div class="summary-trend ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)}% from E${first.epoch}</div></div>`;
+            }).join('') + `<div class="summary-card"><div class="summary-label">Epochs</div><div class="summary-value">${epochs.length}</div><div class="summary-trend">E${first.epoch} → E${last.epoch}</div></div>`;
+        }
+
+        function renderOverview() {
+            const el = document.getElementById('overview-grid');
+            if (!epochs.length) { el.innerHTML = '<div class="empty">Import epochs</div>'; return; }
+            const m = [['boxMatch', 'Box Match %', 'var(--blue)'], ['personMatch', 'Person Match %', 'var(--purple)'], ['actionF1', 'Action F1 %', 'var(--orange)'], ['relationF1', 'Relation F1 %', 'var(--cyan)'], ['objectAcc', 'Object Accuracy %', 'var(--green)'], ['actionTop1', 'Action Top-1 %', 'var(--purple)']];
+            el.innerHTML = m.map(([k, l, c]) => overviewCard(k, l, c)).join('');
+        }
+
+        function getAllNames(type) {
+            const names = new Set();
+            epochs.forEach(e => {
+                const items = type === 'action' ? e.actions : type === 'relation' ? e.relations : e.objects;
+                items.forEach(i => names.add(i.name));
+            });
+            return [...names];
+        }
+
+        function renderItems(type) {
+            const grid = document.getElementById(type + 's-grid');
+            if (!epochs.length) { grid.innerHTML = '<div class="empty">No data</div>'; return; }
+
+            let names = getAllNames(type);
+            const sortEl = document.getElementById(type + '-sort');
+            const sort = sortEl?.value || 'f1-desc';
+
+            names = names.map(n => ({ name: n, history: getHistory(n, type) }));
+            names.forEach(n => {
+                n.current = n.history.filter(v => v !== null).slice(-1)[0] || 0;
+                n.change = calcChange(n.history);
+            });
+
+            if (sort === 'f1-desc' || sort === 'acc-desc') names.sort((a, b) => b.current - a.current);
+            else if (sort === 'f1-asc' || sort === 'acc-asc') names.sort((a, b) => a.current - b.current);
+            else if (sort === 'change-desc') names.sort((a, b) => b.change - a.change);
+            else if (sort === 'change-asc') names.sort((a, b) => a.change - b.change);
+            else if (sort === 'name') names.sort((a, b) => a.name.localeCompare(b.name));
+
+            grid.innerHTML = names.map(n => itemCard(n.name, type)).join('');
+        }
+
+        function filterItems(type) {
+            const q = document.getElementById(type + '-search')?.value.toLowerCase() || '';
+            document.querySelectorAll(`#${type}s-grid .item-card`).forEach(card => {
+                card.style.display = card.dataset.name.includes(q) ? '' : 'none';
+            });
+        }
+
+        // Events
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + '-panel').classList.add('active');
+            });
+        });
+
+        ['action', 'relation', 'object'].forEach(type => {
+            document.getElementById(type + '-search')?.addEventListener('input', () => filterItems(type));
+            document.getElementById(type + '-sort')?.addEventListener('change', () => renderItems(type));
+        });
+
+        // Init
+        epochs = JSON.parse(localStorage.getItem('yowo') || '[]');
+        render();
+    </script>
+</body>
+
+</html>

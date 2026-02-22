@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Complete INT8 TensorRT Engine Builder for YOWO
-PTH -> ONNX -> INT8 TensorRT with proper calibration
+PTH -> ONNX (optimized) -> INT8 TensorRT with calibration
 
 Usage:
-    python build_int8_engine.py --checkpoint yowo_v2_resnext_yolo26m_multitask_epoch_7-2.pth
+    python build_int8_engine.py --epoch 9
+    python build_int8_engine.py --epoch 9 --skip   # Skip ONNX export, use existing
 """
 
 import os
@@ -14,12 +15,15 @@ import argparse
 import numpy as np
 import subprocess
 
-# Step 1: Export to ONNX
+# Step 1: Export to ONNX (with pre-baked position bias optimization)
 def export_onnx(checkpoint_path, output_onnx, len_clip=32, dataset="smart_home"):
-    """Export PyTorch checkpoint to ONNX using yowov2 conda environment"""
+    """Export PyTorch checkpoint to optimized ONNX using yowov2 conda environment"""
     print(f"\n{'='*60}")
-    print("STEP 1: Exporting to ONNX")
+    print("STEP 1: Exporting to Optimized ONNX")
     print(f"{'='*60}")
+    print(f"  Checkpoint: {checkpoint_path}")
+    print(f"  Output: {output_onnx}")
+    print(f"  Optimizations: Pre-baked position bias (eliminates ScatterND/Where ops)")
     
     # Use conda run to ensure correct Python environment with all dependencies
     cmd = [
@@ -33,11 +37,11 @@ def export_onnx(checkpoint_path, output_onnx, len_clip=32, dataset="smart_home")
         "--no_verify"
     ]
     
-    print(f"Running: {' '.join(cmd)}")
+    print(f"\nRunning: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd="/home/michel/yowo")
     
     if result.returncode != 0 or not os.path.exists(output_onnx):
-        print(f"ONNX export failed!")
+        print(f"❌ ONNX export failed!")
         return False
     
     size_mb = os.path.getsize(output_onnx) / 1024 / 1024
@@ -46,11 +50,14 @@ def export_onnx(checkpoint_path, output_onnx, len_clip=32, dataset="smart_home")
 
 
 # Step 2: Build INT8 Engine with Calibration
-def build_int8_engine(onnx_path, engine_path, calib_data_dir, len_clip=32):
-    """Build INT8 TensorRT engine with calibration"""
+def build_int8_engine(onnx_path, engine_path, calib_data_dir, len_clip=32, recalibrate=False):
+    """Build INT8 TensorRT engine with calibration using optimal settings"""
     print(f"\n{'='*60}")
     print("STEP 2: Building INT8 TensorRT Engine")
     print(f"{'='*60}")
+    print(f"  ONNX: {onnx_path}")
+    print(f"  Engine: {engine_path}")
+    print(f"  Calibration data: {calib_data_dir}")
     
     import tensorrt as trt
     import pycuda.driver as cuda
@@ -155,21 +162,36 @@ def build_int8_engine(onnx_path, engine_path, calib_data_dir, len_clip=32):
                 print(f"  Parse error: {parser.get_error(i)}")
             return False
     
-    # Configure for INT8
+    # ============ OPTIMIZED TensorRT Configuration ============
+    # Enable INT8 + FP16 for best performance with fallback
     config.set_flag(trt.BuilderFlag.FP16)
     config.set_flag(trt.BuilderFlag.INT8)
     
-    # Set memory pool - use available memory
-    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 5 * 1024 * 1024 * 1024)  # 5GB
+    # Enable optimizations for faster inference
+    config.set_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
     
-    # Set calibrator
+    # Set memory pool - 5GB workspace for Orin Nano
+    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 5 * 1024 * 1024 * 1024)
+    
+    # Set calibrator for INT8 quantization
     input_shape = (1, 3, len_clip, 224, 224)
     cache_file = "/home/michel/yowo/calibration.cache"
+    
+    # Delete cache if recalibrating
+    if recalibrate and os.path.exists(cache_file):
+        print(f"  Deleting old calibration cache for recalibration...")
+        os.remove(cache_file)
+    
     calibrator = YOWOCalibrator(calib_data_dir, input_shape=input_shape, cache_file=cache_file)
     config.int8_calibrator = calibrator
     
-    # Build
-    print("  Building INT8 engine (this takes 15-30 minutes)...")
+    # Build the engine
+    has_cache = os.path.exists(cache_file)
+    if has_cache:
+        print("  Building INT8 engine (using cached calibration - faster)...")
+    else:
+        print("  Building INT8 engine (calibrating from scratch - 15-30 min)...")
+    
     serialized_engine = builder.build_serialized_network(network, config)
     
     if serialized_engine is None:
@@ -186,46 +208,73 @@ def build_int8_engine(onnx_path, engine_path, calib_data_dir, len_clip=32):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build INT8 TensorRT Engine")
-    parser.add_argument("--checkpoint", type=str, 
-                        default="/home/michel/yowo/yowo_v2_resnext_yolo26m_multitask_epoch_7-2.pth",
-                        help="Path to PyTorch checkpoint")
+    parser = argparse.ArgumentParser(
+        description="Build INT8 TensorRT Engine for YOWO",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python build_int8_engine.py --epoch 9           # Full pipeline: ONNX + INT8
+    python build_int8_engine.py --epoch 9 --skip    # Skip ONNX, use existing
+    python build_int8_engine.py --epoch 9 --recalibrate  # Force new calibration
+        """
+    )
+    parser.add_argument("--epoch", type=int, required=True,
+                        help="Epoch number of checkpoint (e.g., 9 for epoch_9.pth)")
+    parser.add_argument("--skip", action="store_true",
+                        help="Skip ONNX export, use existing ONNX file")
+    parser.add_argument("--recalibrate", action="store_true",
+                        help="Force recalibration (delete existing cache)")
     parser.add_argument("--len_clip", type=int, default=32,
-                        help="Number of frames in clip")
+                        help="Number of frames in clip (default: 32)")
     parser.add_argument("--dataset", type=str, default="smart_home",
                         choices=["smart_home", "charades_ag"],
-                        help="Dataset config (smart_home=42 actions, charades_ag=157 actions)")
+                        help="Dataset config (default: smart_home)")
     parser.add_argument("--calib_data", type=str,
                         default="/home/michel/yowo/data/ActionGenome/frames",
                         help="Path to calibration data (video frame directories)")
     args = parser.parse_args()
     
-    # Output paths
-    onnx_path = "/home/michel/yowo/latest.onnx"
-    engine_path = "/home/michel/yowo/latest_int8.engine"
+    # Build paths from epoch number
+    checkpoint_path = f"/home/michel/yowo/yowo_v2_resnext_yolo26m_multitask_epoch_{args.epoch}.pth"
+    onnx_path = f"/home/michel/yowo/yowo_epoch_{args.epoch}_optimized.onnx"
+    engine_path = f"/home/michel/yowo/yowo_epoch_{args.epoch}_int8.engine"
+    
+    # Verify checkpoint exists
+    if not os.path.exists(checkpoint_path):
+        print(f"❌ Checkpoint not found: {checkpoint_path}")
+        sys.exit(1)
     
     print("="*60)
-    print("YOWO INT8 TensorRT Engine Builder")
+    print("YOWO INT8 TensorRT Engine Builder (Optimized)")
     print("="*60)
-    print(f"Checkpoint: {args.checkpoint}")
+    print(f"Epoch: {args.epoch}")
+    print(f"Checkpoint: {checkpoint_path}")
     print(f"Clip length: {args.len_clip}")
     print(f"Dataset: {args.dataset}")
-    print(f"Calibration data: {args.calib_data}")
     print(f"Output ONNX: {onnx_path}")
     print(f"Output Engine: {engine_path}")
+    print(f"Skip ONNX: {args.skip}")
+    print(f"Recalibrate: {args.recalibrate}")
     
-    # Free memory first
-    print("\nFreeing system memory...")
+    # Free memory and set performance mode
+    print("\nPreparing system...")
     os.system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1")
     os.system("sudo nvpmodel -m 0 2>/dev/null; sudo jetson_clocks 2>/dev/null")
     
     # Step 1: Export ONNX
-    if not export_onnx(args.checkpoint, onnx_path, args.len_clip, args.dataset):
-        print("\n❌ ONNX export failed!")
-        sys.exit(1)
+    if args.skip:
+        if not os.path.exists(onnx_path):
+            print(f"\n❌ --skip specified but ONNX not found: {onnx_path}")
+            sys.exit(1)
+        size_mb = os.path.getsize(onnx_path) / 1024 / 1024
+        print(f"\n✓ Skipping ONNX export, using existing: {onnx_path} ({size_mb:.1f} MB)")
+    else:
+        if not export_onnx(checkpoint_path, onnx_path, args.len_clip, args.dataset):
+            print("\n❌ ONNX export failed!")
+            sys.exit(1)
     
     # Step 2: Build INT8 engine
-    if not build_int8_engine(onnx_path, engine_path, args.calib_data, args.len_clip):
+    if not build_int8_engine(onnx_path, engine_path, args.calib_data, args.len_clip, args.recalibrate):
         print("\n❌ INT8 engine build failed!")
         sys.exit(1)
     

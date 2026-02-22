@@ -171,8 +171,11 @@ class SmartHomeEvaluatorV2:
                 det_confs = detections[:, 4]
                 det_labels = detections[:, 5:]
                 
-                max_dim = max(orig_size)
-                det_boxes_scaled = det_boxes * max_dim
+                # FIX: Scale det boxes the SAME way as GT boxes
+                # orig_size = [height, width]
+                det_boxes_scaled = det_boxes.copy()
+                det_boxes_scaled[:, [0, 2]] *= orig_size[1]  # x uses width
+                det_boxes_scaled[:, [1, 3]] *= orig_size[0]  # y uses height
                 
                 det_obj_probs = det_labels[:, :self.num_objects]
                 person_det_mask = det_obj_probs.argmax(axis=1) == 0
@@ -181,15 +184,27 @@ class SmartHomeEvaluatorV2:
                 gt_matched = [False] * len(gt_boxes)
                 conf_order = np.argsort(-det_confs)
                 
+                # CLASS-AWARE MATCHING: person dets → person GTs, object dets → object GTs
+                # Without this, high-confidence object detections (table, door) that overlap
+                # with person boxes steal the person GT match. Since objects have ~zero action
+                # predictions, this makes action metrics look terrible even when the model
+                # has actually learned actions well at person anchors.
+                det_is_person = det_obj_probs.argmax(axis=1) == 0  # detection classified as person?
+                gt_is_person = gt_labels[:, 0] > 0.5  # GT is person?
+                
                 for det_idx in conf_order:
                     det_box = det_boxes_scaled[det_idx]
                     det_label = det_labels[det_idx]
+                    det_person = det_is_person[det_idx]
                     
                     best_iou = 0
                     best_gt_idx = -1
                     
                     for gt_idx, gt_box in enumerate(gt_boxes_scaled):
                         if gt_matched[gt_idx]:
+                            continue
+                        # Class-aware: person dets match person GTs, object dets match object GTs
+                        if det_person != gt_is_person[gt_idx]:
                             continue
                         iou = self._compute_iou(det_box, gt_box)
                         if iou > best_iou:
@@ -262,7 +277,12 @@ class SmartHomeEvaluatorV2:
         
         if len(all_ious) > 0:
             print(f"\n   IoU Stats: mean={all_ious.mean():.3f}, median={np.median(all_ious):.3f}")
-            print(f"   IoU >0.5: {100*(all_ious >= 0.5).mean():.1f}%, >0.7: {100*(all_ious >= 0.7).mean():.1f}%")
+            print(f"\n   📊 MATCH RATE AT DIFFERENT IoU THRESHOLDS:")
+            print(f"   (Use lower threshold for smart home - you just need rough overlap)")
+            for thresh in [0.1, 0.2, 0.3, 0.4, 0.5, 0.7]:
+                match_rate = 100 * (all_ious >= thresh).mean()
+                marker = " ← current" if abs(thresh - self.iou_thresh) < 0.01 else ""
+                print(f"      IoU≥{thresh}: {match_rate:5.1f}% boxes matched{marker}")
         
         # 2. OBJECTS - Full Per-Class Breakdown
         obj_acc = 0
