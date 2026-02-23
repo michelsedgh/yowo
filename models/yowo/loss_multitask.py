@@ -48,21 +48,31 @@ class SigmoidFocalLoss(nn.Module):
         Returns:
             loss: [N, C] or scalar depending on reduction
         """
-        p = torch.sigmoid(logits)
-        
-        # Standard BCE loss
+        # Ensure targets are pure floats
+        targets = targets.float()
+
+        # 1. Use pure PyTorch C++ BCEWithLogits for supreme FP16 numerical stability
         ce_loss = F.binary_cross_entropy_with_logits(
             input=logits, target=targets, reduction="none"
         )
         
-        # Focal modulation: (1 - p_t)^gamma
-        # p_t = p if target=1, else (1-p)
-        p_t = p * targets + (1.0 - p) * (1.0 - targets)
-        focal_weight = (1.0 - p_t) ** self.gamma
+        # 2. Extract probability (using sigmoid)
+        p = torch.sigmoid(logits)
         
+        # 3. Calculate focal term: (1 - p_t)^gamma
+        #    p_t = p if target=1, else (1-p)
+        p_t = p * targets + (1.0 - p) * (1.0 - targets)
+        
+        # 4. CRITICAL FP16 FIX:
+        # Clamp p_t to prevent (1 - p_t)^gamma from causing log(0)
+        # underflows entirely deep in PyTorch autograd engine.
+        p_t = p_t.clamp(min=1e-5, max=1.0 - 1e-5)
+        
+        # 5. Apply the Focal modulator
+        focal_weight = (1.0 - p_t) ** self.gamma
         loss = focal_weight * ce_loss
         
-        # Alpha balancing
+        # 6. Alpha balancing (handle soft targets properly)
         if self.alpha >= 0:
             alpha_t = self.alpha * targets + (1.0 - self.alpha) * (1.0 - targets)
             loss = alpha_t * loss
