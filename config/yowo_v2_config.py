@@ -203,7 +203,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head
         'head_dim': 128,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -225,7 +225,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head
         'head_dim': 128,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -252,7 +252,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head - larger dim for ResNeXt's 2048 features
         'head_dim': 256,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -276,7 +276,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head
         'head_dim': 128,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -303,7 +303,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head - larger dim for ResNeXt's 2048 features
         'head_dim': 256,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -325,7 +325,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head
         'head_dim': 256,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,
@@ -348,7 +348,7 @@ yowo_v2_config = {
         'memory_momentum': 0.9,
         # head
         'head_dim': 128,
-        'head_norm': 'BN',
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
         'num_reg_heads': 2,

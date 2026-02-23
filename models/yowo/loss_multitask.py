@@ -84,6 +84,10 @@ class MultiTaskCriterion(object):
     - Focal Loss for actions (multi-label, handles imbalance)
     - Focal Loss for relations (multi-label, handles imbalance)
     
+    CRITICAL: Targets are HARD (0/1). IoU quality is applied as a LOSS
+    weight, NOT as target modification. Soft targets (target * iou) cause
+    the model to converge to p=iou instead of p=1.0, which is wrong.
+    
     Expects outputs with separate pred_obj, pred_act, pred_rel.
     """
     
@@ -167,8 +171,15 @@ class MultiTaskCriterion(object):
         rel_preds = torch.cat(outputs['pred_rel'], dim=1)
         box_preds = torch.cat(outputs['pred_box'], dim=1)
         
-        # Combined cls for matcher
-        cls_preds = torch.cat([obj_preds, act_preds, rel_preds], dim=-1)
+        # Combined cls for matcher - convert object logits to sigmoid-compatible
+        # form. Object head uses CrossEntropy (softmax) but the matcher applies
+        # sigmoid() to all logits. We convert: softmax → probs → inverse_sigmoid
+        # so that sigmoid(inverse_sigmoid(softmax_prob)) = softmax_prob.
+        with torch.no_grad():
+            obj_probs_sm = F.softmax(obj_preds.detach(), dim=-1)
+            obj_probs_sm = obj_probs_sm.clamp(1e-6, 1 - 1e-6)
+            obj_logits_for_matcher = torch.log(obj_probs_sm / (1 - obj_probs_sm))
+        cls_preds = torch.cat([obj_logits_for_matcher, act_preds, rel_preds], dim=-1)
         
         # Label assignment
         obj_targets = []
@@ -178,6 +189,7 @@ class MultiTaskCriterion(object):
         conf_targets = []
         fg_masks = []
         is_person_masks = []  # Track which matched GT is a Person (for action masking)
+        iou_weights = []  # IoU quality weights (applied to LOSS, not targets)
 
         for batch_idx in range(bs):
             tgt_labels = targets[batch_idx]["labels"].to(device)
@@ -193,6 +205,7 @@ class MultiTaskCriterion(object):
                 conf_target = conf_preds.new_zeros((num_anchors, 1))
                 fg_mask = conf_preds.new_zeros(num_anchors).bool()
                 is_person_mask = conf_preds.new_zeros((0,)).bool()
+                iou_weight = conf_preds.new_zeros((0, 1))
             else:
                 (
                     gt_matched_classes,
@@ -216,20 +229,18 @@ class MultiTaskCriterion(object):
                 # Split labels
                 matched_labels = tgt_labels[matched_gt_inds]
                 
-                # Actions & Relations: IoU-weighted soft targets with floor
-                # pred_ious are ~0.79 at epoch 14, so the floor mostly matters
-                # for early training when box predictions are still rough.
-                
                 # Object: argmax (exclusive class)
                 obj_target = matched_labels[:, :self.num_objects].argmax(dim=-1)
                 
+                # Actions & Relations: HARD (0/1) targets
+                # IoU quality applied as loss WEIGHT, not target modification.
+                # Soft targets (target * iou) cause BCE to converge to p=iou
+                # instead of p=1.0, which is fundamentally wrong.
                 act_target = matched_labels[:, self.num_objects:self.num_objects+self.num_actions]
-                iou_weight = pred_ious.clamp(min=0.3).unsqueeze(-1)
-                act_target = act_target * iou_weight
-                
-                # Relations: same IoU-weighted soft targets with floor
                 rel_target = matched_labels[:, self.num_objects+self.num_actions:]
-                rel_target = rel_target * iou_weight
+                
+                # IoU quality weight: higher IoU = more trustworthy features = more loss weight
+                iou_weight = pred_ious.clamp(min=0.0).unsqueeze(-1)  # [N, 1]
 
                 
                 # Person mask: object class 0 is "person" - for action loss masking
@@ -242,6 +253,7 @@ class MultiTaskCriterion(object):
             conf_targets.append(conf_target)
             fg_masks.append(fg_mask)
             is_person_masks.append(is_person_mask)
+            iou_weights.append(iou_weight)
 
         # Concatenate
         obj_targets = torch.cat(obj_targets, dim=0)
@@ -251,6 +263,7 @@ class MultiTaskCriterion(object):
         conf_targets = torch.cat(conf_targets, dim=0)
         fg_masks = torch.cat(fg_masks, dim=0)
         is_person_masks = torch.cat(is_person_masks, dim=0)  # [total_fg]
+        iou_weights = torch.cat(iou_weights, dim=0)  # [total_fg, 1]
         
         num_fg = fg_masks.sum()
         if is_dist_avail_and_initialized():
@@ -269,23 +282,22 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (BCE/Focal - multi-label, PERSON-ONLY)
-        # Only compute action loss for Person boxes (class 0)
+        # Action loss (Focal/BCE - multi-label, PERSON-ONLY, IoU-weighted)
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0 and is_person_masks.sum() > 0:
-            # Only compute action loss for Person boxes
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
-            loss_act = self.act_lossf(person_act_preds, person_act_targets)
-            loss_act = loss_act.sum() / is_person_masks.sum().clamp(1.0)
+            person_iou_weights = iou_weights[is_person_masks]  # [num_person, 1]
+            loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
+            loss_act = (loss_act * person_iou_weights).sum() / num_fg
         else:
             loss_act = torch.tensor(0.0, device=device)
 
-        # Relation loss (BCE/Focal - multi-label)
+        # Relation loss (Focal/BCE - multi-label, IoU-weighted)
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
-            loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)
-            loss_rel = loss_rel.sum() / num_fg
+            loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
+            loss_rel = (loss_rel * iou_weights).sum() / num_fg
         else:
             loss_rel = torch.tensor(0.0, device=device)
 

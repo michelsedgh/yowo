@@ -61,9 +61,9 @@ class LocalContextModule(nn.Module):
         For each position, pools nearby confidence-weighted object predictions
         to answer: "what objects are near me?"
         """
-        # Detach predictions: don't let context gradients destabilize obj/conf heads
-        obj_probs = F.softmax(obj_logits.detach(), dim=1)  # [B, 36, H, W]
-        conf = torch.sigmoid(conf_logits.detach())          # [B, 1, H, W]
+        # V2 Fix: DO NOT detach. Let gradients flow back to learn strong confidence early!
+        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
+        conf = torch.sigmoid(conf_logits)          # [B, 1, H, W]
         
         # Confidence-weighted object presence
         grounded_obj = obj_probs * conf  # [B, 36, H, W]
@@ -103,10 +103,10 @@ class CascadeContextModule(nn.Module):
         """
         Enrich features with local object + relation context.
         """
-        # Detach: don't let action gradients destabilize obj/rel/conf heads
-        obj_probs = F.softmax(obj_logits.detach(), dim=1)  # [B, 36, H, W]
-        rel_probs = torch.sigmoid(rel_logits.detach())      # [B, 26, H, W]
-        conf = torch.sigmoid(conf_logits.detach())           # [B, 1, H, W]
+        # V2 Fix: DO NOT detach. Action gradients must backpropagate to build meaningful object/relation context.
+        obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
+        rel_probs = torch.sigmoid(rel_logits)      # [B, 26, H, W]
+        conf = torch.sigmoid(conf_logits)           # [B, 1, H, W]
         
         # Confidence-weighted
         grounded = torch.cat([
@@ -260,11 +260,18 @@ class YOWOMultiTaskV2(nn.Module):
         init_prob = 0.01
         bias_value = -torch.log(torch.tensor((1. - init_prob) / init_prob))
         
-        for pred_list in [self.conf_preds, self.obj_preds, self.rel_preds, self.act_preds]:
+        # BCE-based heads: conf, act, rel (use low init prob to prevent background over-prediction)
+        for pred_list in [self.conf_preds, self.rel_preds, self.act_preds]:
             for pred in pred_list:
                 b = pred.bias.view(1, -1)
                 b.data.fill_(bias_value.item())
                 pred.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
+        
+        # CrossEntropy-based head: obj (use zero bias for uniform prior over classes)
+        # NOTE: obj_preds uses softmax, not sigmoid. Non-zero bias would create
+        # artificial class imbalance at initialization.
+        for pred in self.obj_preds:
+            pred.bias.data.zero_()
 
 
     def generate_anchors(self, fmp_size, stride):
@@ -315,21 +322,23 @@ class YOWOMultiTaskV2(nn.Module):
             act_pred = self.act_preds[level]
             reg_pred = self.reg_preds[level]
         
-        # ===== FIXED CASCADE: Object → Relation → Action =====
-        # Now passes confidence to context modules!
+        # ===== TRUE CASCADE: Object → Relation → Action =====
+        # Each stage builds on the ENRICHED features from the previous stage.
+        # This is a deep chain, not a shallow star topology.
         
         # 0. Confidence prediction (EARLY - needed for context gating!)
         conf_logits = conf_pred(reg_feat)  # [B, 1, H, W]
         
-        # 1. Object prediction
+        # 1. Object prediction (from base classification features)
         obj_logits = obj_pred(cls_feat)
         
-        # 2. Relation prediction (with CONFIDENCE-GATED object context)
-        rel_feat = obj_ctx(cls_feat, obj_logits, conf_logits)  # V2: passes conf!
+        # 2. Relation prediction (features enriched with object context)
+        rel_feat = obj_ctx(cls_feat, obj_logits, conf_logits)
         rel_logits = rel_pred(rel_feat)
         
-        # 3. Action prediction (with CONFIDENCE-GATED object + relation context)
-        act_feat = rel_ctx(cls_feat, obj_logits, rel_logits, conf_logits)  # V2: passes conf!
+        # 3. Action prediction (features enriched with object + relation context)
+        # KEY: starts from rel_feat (already has object context), NOT cls_feat
+        act_feat = rel_ctx(rel_feat, obj_logits, rel_logits, conf_logits)
         act_logits = act_pred(act_feat)
         
         # Box regression

@@ -9,3 +9,5 @@ det_results
 *.png
 *.mp4
 *.jpg
+*.onnx
+*.engine

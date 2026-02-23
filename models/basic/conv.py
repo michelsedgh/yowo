@@ -23,6 +23,12 @@ def get_norm2d(norm_type, dim):
         return nn.BatchNorm2d(dim)
     elif norm_type == 'IN':
         return nn.InstanceNorm2d(dim)
+    elif norm_type == 'GN':
+        # GroupNorm: 32 groups is standard, but ensure dim is divisible
+        num_groups = min(32, dim)
+        while dim % num_groups != 0 and num_groups > 1:
+            num_groups //= 2
+        return nn.GroupNorm(num_groups, dim)
 
 
 class Conv2d(nn.Module):
