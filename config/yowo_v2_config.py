@@ -357,4 +357,84 @@ yowo_v2_config = {
         'multi_task': True,
     },
 
+    # =========================================================================
+    # OPTIMIZED FOR EDGE DEPLOYMENT (Orin Nano)
+    # ShuffleNetV2 2.0x @ 480px - Best balance of speed and accuracy
+    # =========================================================================
+    
+    # YOLO26M + ShuffleNetV2 2.0x - RECOMMENDED for Orin Nano @ 480px
+    # Expected: 14-18 FPS on Orin Nano with TensorRT INT8
+    'yowo_v2_shufflenet_yolo26m_multitask': {
+        # backbone
+        ## 2D - YOLO26M (medium - balanced speed/accuracy)
+        'backbone_2d': 'yolo26m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ShuffleNetV2 2.0x (66.4% K400, 976ch output, strong temporal)
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '2.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head - 128 for ShuffleNet's 976ch features
+        'head_dim': 128,
+        'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
+    # YOLO26S + ShuffleNetV2 2.0x - Even faster, smaller 2D backbone
+    'yowo_v2_shufflenet_yolo26s_multitask': {
+        # backbone
+        ## 2D - YOLO26S (small - fastest)
+        'backbone_2d': 'yolo26s',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ShuffleNetV2 2.0x
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '2.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'GN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
+    # =========================================================================
+    # SHUFFLENET 1.0x VARIANTS (Lighter 3D backbone, faster inference)
+    # Use these if 2.0x is too slow at high resolutions
+    # =========================================================================
+    
+    # YOLO26M + ShuffleNetV2 1.0x - Faster 3D, good for 640px
+    'yowo_v2_shufflenet1x_yolo26m_multitask': {
+        # backbone
+        ## 2D - YOLO26M
+        'backbone_2d': 'yolo26m',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ShuffleNetV2 1.0x (464ch output, lighter than 2.0x)
+        'backbone_3d': 'shufflenetv2',
+        'model_size': '1.0x',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 128,
+        'head_norm': 'GN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
 }

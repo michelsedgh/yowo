@@ -26,15 +26,8 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 import cv2
 from flask import Flask, Response, render_template_string, jsonify
-import pycuda.driver as cuda
-import tensorrt as trt
-
-# ============================================================
-# CUDA Context
-# ============================================================
-cuda.init()
-cuda_device = cuda.Device(0)
-cuda_ctx = cuda_device.make_context()
+# NOTE: pycuda and tensorrt are imported inside the worker thread
+# to ensure CUDA context is bound to the correct thread
 
 # ============================================================
 # Load Smart Home Classes
@@ -101,10 +94,10 @@ class Track:
     misses: int = 0
     is_confirmed: bool = False
     
-    # EMA coefficients
-    BOX_EMA = 0.4      # Lower = more smoothing
-    CONF_EMA = 0.5
-    PROB_EMA = 0.3     # More smoothing for class probabilities
+    # EMA coefficients (higher = more responsive to new detections)
+    BOX_EMA = 0.5      
+    CONF_EMA = 0.6
+    PROB_EMA = 0.5     # Balanced smoothing - not too aggressive
     
     def update(self, det: Detection, raw_probs: dict):
         """Update track with new detection."""
@@ -151,7 +144,7 @@ class Track:
         actions = []
         if obj_idx == 0:  # person
             for idx in np.argsort(-self.smooth_act_probs)[:5]:
-                if self.smooth_act_probs[idx] > 0.20:
+                if self.smooth_act_probs[idx] > 0.05:  # Low threshold for webcam domain
                     actions.append((ACT_CLASSES[idx], float(self.smooth_act_probs[idx])))
         
         # Get top relations (ALL detections — objects have per-object relations)
@@ -180,7 +173,7 @@ class Track:
 class Tracker:
     """Simple IoU-based multi-object tracker with temporal smoothing."""
     
-    def __init__(self, iou_threshold=0.3, max_age=10):
+    def __init__(self, iou_threshold=0.15, max_age=10):
         self.tracks: Dict[int, Track] = {}
         self.next_id = 0
         self.iou_threshold = iou_threshold
@@ -296,52 +289,52 @@ class Tracker:
 
 
 # ============================================================
-# TensorRT Engine
+# TensorRT Engine (initialized inside worker thread)
 # ============================================================
 class Engine:
-    def __init__(self, path):
+    def __init__(self, path, cuda_module):
+        import tensorrt as trt
+        self.cuda = cuda_module
         self.logger = trt.Logger(trt.Logger.WARNING)
-        cuda_ctx.push()
-        try:
-            with open(path, 'rb') as f:
-                self.engine = trt.Runtime(self.logger).deserialize_cuda_engine(f.read())
-            self.ctx = self.engine.create_execution_context()
-            self.in_name = self.engine.get_tensor_name(0)
-            self.out_name = self.engine.get_tensor_name(1)
-            self.in_shape = tuple(self.engine.get_tensor_shape(self.in_name))
-            self.out_shape = tuple(self.engine.get_tensor_shape(self.out_name))
-            self.clip_length = self.in_shape[2]
-            
-            self.d_in = cuda.mem_alloc(int(np.prod(self.in_shape) * 4))
-            self.d_out = cuda.mem_alloc(int(np.prod(self.out_shape) * 4))
-            self.h_in = cuda.pagelocked_empty(self.in_shape, dtype=np.float32)
-            self.h_out = cuda.pagelocked_empty(self.out_shape, dtype=np.float32)
-            self.stream = cuda.Stream()
-            self.ctx.set_tensor_address(self.in_name, int(self.d_in))
-            self.ctx.set_tensor_address(self.out_name, int(self.d_out))
-            
-            print(f"Engine loaded: {path}")
-            print(f"  Input: {self.in_shape}, Output: {self.out_shape}")
-        finally:
-            cuda_ctx.pop()
+        
+        with open(path, 'rb') as f:
+            engine_data = f.read()
+        self.engine = trt.Runtime(self.logger).deserialize_cuda_engine(engine_data)
+        if self.engine is None:
+            raise RuntimeError(f"Failed to load TensorRT engine from {path}. Check GPU memory.")
+        
+        self.ctx = self.engine.create_execution_context()
+        self.in_name = self.engine.get_tensor_name(0)
+        self.out_name = self.engine.get_tensor_name(1)
+        self.in_shape = tuple(self.engine.get_tensor_shape(self.in_name))
+        self.out_shape = tuple(self.engine.get_tensor_shape(self.out_name))
+        self.clip_length = self.in_shape[2]
+        
+        self.d_in = self.cuda.mem_alloc(int(np.prod(self.in_shape) * 4))
+        self.d_out = self.cuda.mem_alloc(int(np.prod(self.out_shape) * 4))
+        self.h_in = self.cuda.pagelocked_empty(self.in_shape, dtype=np.float32)
+        self.h_out = self.cuda.pagelocked_empty(self.out_shape, dtype=np.float32)
+        self.stream = self.cuda.Stream()
+        self.ctx.set_tensor_address(self.in_name, int(self.d_in))
+        self.ctx.set_tensor_address(self.out_name, int(self.d_out))
+        
+        print(f"Engine loaded: {path}")
+        print(f"  Input: {self.in_shape}, Output: {self.out_shape}")
 
     def run(self, data):
-        cuda_ctx.push()
-        try:
-            np.copyto(self.h_in, data)
-            cuda.memcpy_htod_async(self.d_in, self.h_in, self.stream)
-            self.ctx.execute_async_v3(self.stream.handle)
-            cuda.memcpy_dtoh_async(self.h_out, self.d_out, self.stream)
-            self.stream.synchronize()
-            return self.h_out.copy()
-        finally:
-            cuda_ctx.pop()
+        np.copyto(self.h_in, data)
+        self.cuda.memcpy_htod_async(self.d_in, self.h_in, self.stream)
+        self.ctx.execute_async_v3(self.stream.handle)
+        self.cuda.memcpy_dtoh_async(self.h_out, self.d_out, self.stream)
+        self.stream.synchronize()
+        return self.h_out.copy()
 
 
 # ============================================================
 # Post-processing
 # ============================================================
 def nms(boxes, scores, thresh):
+    """Standard NMS on boxes."""
     if len(boxes) == 0:
         return []
     x1, y1, x2, y2 = boxes[:,0], boxes[:,1], boxes[:,2], boxes[:,3]
@@ -361,14 +354,51 @@ def nms(boxes, scores, thresh):
     return keep
 
 
-def postprocess(out, conf_th=0.10, nms_th=0.5, min_obj_prob=0.25, min_person_prob=0.20, img_size=224):
+def class_aware_nms(boxes, scores, class_ids, act_scores, thresh):
+    """NMS applied separately per class. For persons, use tighter NMS + action score."""
+    if len(boxes) == 0:
+        return []
+    
+    keep = []
+    unique_classes = np.unique(class_ids)
+    
+    for cls_id in unique_classes:
+        cls_mask = class_ids == cls_id
+        cls_indices = np.where(cls_mask)[0]
+        
+        if len(cls_indices) == 0:
+            continue
+        
+        cls_boxes = boxes[cls_mask]
+        
+        # For persons (class 0): use tighter NMS threshold + combined score
+        # This aggressively merges overlapping person boxes
+        if cls_id == 0:
+            cls_conf = scores[cls_mask]
+            cls_act = act_scores[cls_mask]
+            # Combined score: prioritize detections with good action predictions
+            cls_scores_combined = cls_conf * (1.0 + cls_act * 2.0)
+            # Use very tight NMS for persons to merge overlapping boxes
+            person_nms_thresh = 0.15
+            cls_keep = nms(cls_boxes, cls_scores_combined, person_nms_thresh)
+        else:
+            cls_scores_combined = scores[cls_mask]
+            cls_keep = nms(cls_boxes, cls_scores_combined, thresh)
+        
+        keep.extend(cls_indices[cls_keep])
+    
+    return keep
+
+
+def postprocess(out, conf_th=0.08, nms_th=0.45, min_obj_prob=0.15, min_person_prob=0.10, img_size=224):
     """Post-process model output, return detections and raw probabilities.
     
     Args:
-        conf_th: Minimum objectness confidence (lowered to 0.20 for better recall)
+        conf_th: Minimum objectness confidence (lowered for better recall)
         nms_th: NMS IoU threshold
         min_obj_prob: Minimum object class probability for non-person objects
-        min_person_prob: Minimum probability for person detection (lower for better human recall)
+        min_person_prob: Minimum probability for person detection (low for webcam domain)
+        img_size: Model input size for box normalization
     """
     if out.ndim == 3:
         out = out.squeeze(0)
@@ -380,14 +410,25 @@ def postprocess(out, conf_th=0.10, nms_th=0.5, min_obj_prob=0.25, min_person_pro
     
     filt = out[mask]
     boxes = filt[:, BOX_START:BOX_END] / img_size
-    keep = nms(boxes, filt[:, 0], nms_th)
+    
+    # Get class IDs for class-aware NMS
+    obj_probs = filt[:, OBJ_START:OBJ_END]
+    class_ids = np.argmax(obj_probs, axis=1)
+    
+    # Get max action probability for each detection (for action-aware NMS)
+    act_probs_all = filt[:, ACT_START:ACT_END]
+    act_max_scores = np.max(act_probs_all, axis=1)
+    
+    # Class-aware NMS: for persons, use combined conf+action score
+    keep = class_aware_nms(boxes, filt[:, 0], class_ids, act_max_scores, nms_th)
     
     detections = []
     raw_probs_list = []
     
     for i in keep:
         d = filt[i]
-        box = d[BOX_START:BOX_END] / img_size
+        # Normalize and CLIP boxes to [0, 1] range
+        box = np.clip(d[BOX_START:BOX_END] / img_size, 0.0, 1.0)
         
         obj_probs = d[OBJ_START:OBJ_END]
         obj_idx = np.argmax(obj_probs)
@@ -409,7 +450,7 @@ def postprocess(out, conf_th=0.10, nms_th=0.5, min_obj_prob=0.25, min_person_pro
         # Actions only for persons (objects don't perform actions)
         if is_person:
             for idx in np.argsort(-act_probs)[:5]:
-                if act_probs[idx] > 0.20:
+                if act_probs[idx] > 0.05:  # Low threshold for webcam domain
                     actions.append((ACT_CLASSES[idx], float(act_probs[idx])))
         
         # Relations for ALL detections (each object has its own relation to person)
@@ -534,96 +575,110 @@ det_logger = None
 def main_loop(cam_id, engine_path, enable_logging=False):
     global det_logger
     
-    cap = cv2.VideoCapture(cam_id)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    # Initialize CUDA in this thread (CRITICAL: must be done before any CUDA ops)
+    import pycuda.driver as cuda
+    cuda.init()
+    cuda_device = cuda.Device(0)
+    cuda_ctx = cuda_device.make_context()
+    print(f"CUDA initialized in worker thread (device: {cuda_device.name()})")
     
-    if not cap.isOpened():
-        print("ERROR: Cannot open camera")
-        S.running = False
-        return
-    
-    engine = Engine(engine_path)
-    S.clip_length = engine.clip_length
-    S.frame_buffer = deque(maxlen=S.clip_length)
-    
-    if enable_logging:
-        det_logger = DetectionLogger()
-        print(f"Logging detections to: {det_logger.log_file}")
-    
-    img_size = engine.in_shape[3]  # H from (1, 3, T, H, W)
-    clip_buffer = np.zeros((1, 3, S.clip_length, img_size, img_size), dtype=np.float32)
-    fps_buf = deque(maxlen=30)
-    inf_times = deque(maxlen=30)
-    
-    print(f"Starting inference (clip_length={S.clip_length})...")
-    
-    while S.running:
-        t_start = time.time()
+    cap = None
+    try:
+        cap = cv2.VideoCapture(cam_id)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.001)
-            continue
+        if not cap.isOpened():
+            print("ERROR: Cannot open camera")
+            S.running = False
+            return
         
-        with state_lock:
-            S.frame = frame.copy()
+        engine = Engine(engine_path, cuda)
+        S.clip_length = engine.clip_length
+        S.frame_buffer = deque(maxlen=S.clip_length)
         
-        # Preprocess
-        t0 = time.time()
-        small = cv2.resize(frame, (img_size, img_size))
-        small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        S.frame_buffer.append(small)
-        S.profiler.log('preprocess', time.time() - t0)
+        if enable_logging:
+            det_logger = DetectionLogger()
+            print(f"Logging detections to: {det_logger.log_file}")
         
-        if len(S.frame_buffer) >= S.clip_length:
-            # Build clip
-            t0 = time.time()
-            for i, f in enumerate(S.frame_buffer):
-                clip_buffer[0, :, i, :, :] = f.transpose(2, 0, 1)
-            S.profiler.log('clip_build', time.time() - t0)
+        img_size = engine.in_shape[3]  # H from (1, 3, T, H, W)
+        clip_buffer = np.zeros((1, 3, S.clip_length, img_size, img_size), dtype=np.float32)
+        fps_buf = deque(maxlen=30)
+        inf_times = deque(maxlen=30)
+        
+        print(f"Starting inference (clip_length={S.clip_length})...")
+        
+        while S.running:
+            t_start = time.time()
             
-            # Inference
-            t0 = time.time()
-            out = engine.run(clip_buffer)
-            inf_time = time.time() - t0
-            inf_times.append(inf_time)
-            S.profiler.log('inference', inf_time)
-            
-            # Post-process
-            t0 = time.time()
-            raw_dets, raw_probs = postprocess(out, img_size=img_size)
-            S.profiler.log('postprocess', time.time() - t0)
-            
-            # Track and smooth
-            t0 = time.time()
-            tracked_dets = tracker.update(raw_dets, raw_probs)
-            S.profiler.log('tracking', time.time() - t0)
-            
-            # Update debug info
-            if S.debug_mode:
-                confs = out[:, 0] if out.ndim == 2 else out[0, :, 0]
-                hist, _ = np.histogram(confs, bins=20, range=(0, 1))
-                S.conf_histogram = hist
-                S.detection_counts.append(len(tracked_dets))
-                S.track_ages = {t.track_id: t.age for t in tracker.tracks.values()}
-            
-            # Log
-            if det_logger:
-                det_logger.log(tracked_dets, time.time())
+            ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.001)
+                continue
             
             with state_lock:
-                S.raw_detections = raw_dets
-                S.tracked_detections = tracked_dets
-                S.inf_fps = 1.0 / np.mean(inf_times) if inf_times else 0
-        
-        # Total FPS
-        total_time = time.time() - t_start
-        fps_buf.append(1.0 / total_time)
-        S.total_fps = np.mean(fps_buf)
+                S.frame = frame.copy()
+            
+            # Preprocess
+            t0 = time.time()
+            small = cv2.resize(frame, (img_size, img_size))
+            small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            S.frame_buffer.append(small)
+            S.profiler.log('preprocess', time.time() - t0)
+            
+            if len(S.frame_buffer) >= S.clip_length:
+                # Build clip
+                t0 = time.time()
+                for i, f in enumerate(S.frame_buffer):
+                    clip_buffer[0, :, i, :, :] = f.transpose(2, 0, 1)
+                S.profiler.log('clip_build', time.time() - t0)
+                
+                # Inference
+                t0 = time.time()
+                out = engine.run(clip_buffer)
+                inf_time = time.time() - t0
+                inf_times.append(inf_time)
+                S.profiler.log('inference', inf_time)
+                
+                # Post-process
+                t0 = time.time()
+                raw_dets, raw_probs = postprocess(out, img_size=img_size)
+                S.profiler.log('postprocess', time.time() - t0)
+                
+                # Track and smooth
+                t0 = time.time()
+                tracked_dets = tracker.update(raw_dets, raw_probs)
+                S.profiler.log('tracking', time.time() - t0)
+                
+                # Update debug info
+                if S.debug_mode:
+                    confs = out[:, 0] if out.ndim == 2 else out[0, :, 0]
+                    hist, _ = np.histogram(confs, bins=20, range=(0, 1))
+                    S.conf_histogram = hist
+                    S.detection_counts.append(len(tracked_dets))
+                    S.track_ages = {t.track_id: t.age for t in tracker.tracks.values()}
+                
+                # Log
+                if det_logger:
+                    det_logger.log(tracked_dets, time.time())
+                
+                with state_lock:
+                    S.raw_detections = raw_dets
+                    S.tracked_detections = tracked_dets
+                    S.inf_fps = 1.0 / np.mean(inf_times) if inf_times else 0
+            
+            # Total FPS
+            total_time = time.time() - t_start
+            fps_buf.append(1.0 / total_time)
+            S.total_fps = np.mean(fps_buf)
     
-    cap.release()
+    finally:
+        if cap is not None:
+            cap.release()
+        cuda_ctx.pop()
+        cuda_ctx.detach()
+        print("CUDA context cleaned up")
 
 
 # ============================================================
@@ -939,7 +994,7 @@ def favicon():
 # ============================================================
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='YOWO Smart Home Dashboard')
-    parser.add_argument('--engine', default='yowo_epoch_9_int8.engine', help='TensorRT engine path')
+    parser.add_argument('--engine', default='yowo_v2_resnext_yolo26m_multitask_epoch_10_int8.engine', help='TensorRT engine path')
     parser.add_argument('--camera', type=int, default=0, help='Camera ID')
     parser.add_argument('--port', type=int, default=5000, help='Web server port')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')

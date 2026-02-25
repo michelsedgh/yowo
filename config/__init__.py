@@ -16,6 +16,12 @@ def build_dataset_config(args):
     print('==============================')
     print('Dataset Config: {} '.format(args.dataset.upper()))
     
-    d_cfg = dataset_config[args.dataset]
+    d_cfg = dataset_config[args.dataset].copy()  # Make a copy to avoid modifying the original
+    
+    # Override image size if specified via command line
+    if hasattr(args, 'img_size') and args.img_size is not None:
+        d_cfg['train_size'] = args.img_size
+        d_cfg['test_size'] = args.img_size
+        print(f'📐 Image size override: {args.img_size}x{args.img_size}')
 
     return d_cfg

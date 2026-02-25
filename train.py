@@ -98,6 +98,8 @@ def parse_args():
                         help='data root')
     parser.add_argument('--num_workers', default=4, type=int, 
                         help='Number of workers used in dataloading')
+    parser.add_argument('-size', '--img_size', default=None, type=int,
+                        help='Override train/test image size (e.g., 320, 480, 640). If not set, uses dataset config default.')
 
     # Matcher
     parser.add_argument('--center_sampling_radius', default=2.5, type=float, 
