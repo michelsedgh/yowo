@@ -362,7 +362,7 @@ yowo_v2_config = {
     # ShuffleNetV2 2.0x @ 480px - Best balance of speed and accuracy
     # =========================================================================
     
-    # YOLO26M + ShuffleNetV2 2.0x - RECOMMENDED for Orin Nano @ 480px
+    # YOLO26M + ShuffleNetV2 2.0x - RECOMMENDED for Orin Nano @ 480px+
     # Expected: 14-18 FPS on Orin Nano with TensorRT INT8
     'yowo_v2_shufflenet_yolo26m_multitask': {
         # backbone
@@ -375,8 +375,8 @@ yowo_v2_config = {
         'model_size': '2.0x',
         'pretrained_3d': True,
         'memory_momentum': 0.9,
-        # head - 128 for ShuffleNet's 976ch features
-        'head_dim': 128,
+        # head - 256 to match ResNeXt capacity (CRITICAL for high-res)
+        'head_dim': 256,
         'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
@@ -399,7 +399,7 @@ yowo_v2_config = {
         'pretrained_3d': True,
         'memory_momentum': 0.9,
         # head
-        'head_dim': 128,
+        'head_dim': 256,
         'head_norm': 'GN',
         'head_act': 'silu',
         'num_cls_heads': 2,
@@ -427,7 +427,7 @@ yowo_v2_config = {
         'pretrained_3d': True,
         'memory_momentum': 0.9,
         # head
-        'head_dim': 128,
+        'head_dim': 256,
         'head_norm': 'GN',
         'head_act': 'silu',
         'num_cls_heads': 2,

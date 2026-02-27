@@ -63,10 +63,11 @@ class LocalContextModule(nn.Module):
         """
         # V2 Fix: DO NOT detach. Let gradients flow back to learn strong confidence early!
         obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
-        conf = torch.sigmoid(conf_logits)          # [B, 1, H, W]
         
-        # Confidence-weighted object presence
-        grounded_obj = obj_probs * conf  # [B, 36, H, W]
+        # CRITICAL FIX: Removed confidence gating - it was dampening gradients by 50-70%!
+        # Action gradients need to flow back to object predictions to learn better features.
+        # Confidence is for inference filtering, not training gradient gating.
+        grounded_obj = obj_probs  # [B, 36, H, W] - no confidence multiplication!
         
         # Pool from local neighborhood: "what objects are near this position?"
         local_obj = F.avg_pool2d(
@@ -106,12 +107,12 @@ class CascadeContextModule(nn.Module):
         # V2 Fix: DO NOT detach. Action gradients must backpropagate to build meaningful object/relation context.
         obj_probs = F.softmax(obj_logits, dim=1)  # [B, 36, H, W]
         rel_probs = torch.sigmoid(rel_logits)      # [B, 26, H, W]
-        conf = torch.sigmoid(conf_logits)           # [B, 1, H, W]
         
-        # Confidence-weighted
+        # CRITICAL FIX: Removed confidence gating - same reason as object context
+        # Action gradients need full strength to flow back through the cascade
         grounded = torch.cat([
-            obj_probs * conf,  # [B, 36, H, W]
-            rel_probs * conf,  # [B, 26, H, W]
+            obj_probs,  # [B, 36, H, W] - no confidence multiplication!
+            rel_probs,  # [B, 26, H, W] - no confidence multiplication!
         ], dim=1)  # [B, 62, H, W]
         
         # Pool from local neighborhood

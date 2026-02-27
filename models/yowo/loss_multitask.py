@@ -121,9 +121,10 @@ class MultiTaskCriterion(object):
         
         # Focal Loss for actions and relations (handles class imbalance)
         if use_focal_loss:
-            print("  Using Focal Loss for actions and relations (alpha=0.25, gamma=2.0)")
-            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
-            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
+            print("  Using Focal Loss (gamma=1.0) for actions and relations")
+            # gamma=1.0 for faster early learning (was 2.0, too aggressive for epoch 1-5)
+            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=1.0, reduction='none')
+            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=1.0, reduction='none')
         else:
             print("  Using standard BCE for actions and relations")
             self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
@@ -292,22 +293,27 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (Focal/BCE - multi-label, PERSON-ONLY, IoU-weighted)
+        # Action loss (Focal/BCE - multi-label, PERSON-ONLY)
+        # CRITICAL FIX: Removed IoU weighting - it was killing 86% of gradients!
+        # Hard targets (0/1) already encode correctness. IoU weighting prevents
+        # the model from LEARNING to make better boxes by dampening gradients.
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0 and is_person_masks.sum() > 0:
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
-            person_iou_weights = iou_weights[is_person_masks]  # [num_person, 1]
             loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
-            loss_act = (loss_act * person_iou_weights).sum() / num_fg
+            loss_act = loss_act.sum() / num_fg  # No IoU weighting!
         else:
             loss_act = torch.tensor(0.0, device=device)
 
-        # Relation loss (Focal/BCE - multi-label, IoU-weighted)
+        # Relation loss (Focal/BCE - multi-label)
+        # CRITICAL FIX: Removed IoU weighting for consistency with action loss
+        # Relations are spatial relationships (e.g., "holding", "sitting on") that
+        # should be learned even when box localization is imperfect early in training
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
-            loss_rel = (loss_rel * iou_weights).sum() / num_fg
+            loss_rel = loss_rel.sum() / num_fg  # No IoU weighting!
         else:
             loss_rel = torch.tensor(0.0, device=device)
 
