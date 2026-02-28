@@ -407,6 +407,8 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
+        # Motion diff: explicit motion channel for better temporal actions
+        'use_motion_diff': True,
     },
 
     # YOLO26S + ResNeXt101 - Faster 2D, powerful 3D temporal backbone
@@ -430,6 +432,8 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
+        # Motion diff: explicit motion channel for better temporal actions
+        'use_motion_diff': True,
     },
 
     # =========================================================================

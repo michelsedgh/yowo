@@ -30,6 +30,42 @@ from .head import build_head
 from utils.nms import multiclass_nms
 
 
+class MotionDiffModule(nn.Module):
+    """
+    Compute temporal frame differences and add as 4th channel.
+    
+    This makes motion EXPLICIT rather than relying on 3D convs to learn it implicitly.
+    The diff channel highlights moving edges/boundaries.
+    
+    Input:  [B, 3, T, H, W] - RGB video clip
+    Output: [B, 4, T, H, W] - RGBD where D = temporal difference (motion)
+    """
+    
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        # x: [B, 3, T, H, W]
+        B, C, T, H, W = x.shape
+        
+        # Convert to grayscale: [B, 1, T, H, W]
+        # Using standard luminance weights
+        gray = 0.299 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.114 * x[:, 2:3]
+        
+        # Compute temporal difference: diff[t] = gray[t] - gray[t-1]
+        # Shape: [B, 1, T, H, W]
+        diff = torch.zeros_like(gray)
+        diff[:, :, 1:] = gray[:, :, 1:] - gray[:, :, :-1]
+        # diff[:, :, 0] = 0 (no previous frame for first frame)
+        
+        # Normalize diff to similar range as RGB (helps training stability)
+        # Diff values are typically in [-1, 1], we shift to [0, 1] range
+        diff = (diff + 1.0) / 2.0
+        
+        # Concatenate: [B, 4, T, H, W]
+        return torch.cat([x, diff], dim=1)
+
+
 class LocalContextModule(nn.Module):
     """
     Simple local context: pool nearby object predictions to enrich features.
@@ -170,6 +206,12 @@ class YOWOMultiTaskV2(nn.Module):
         self.nms_thresh = nms_thresh
         self.topk = topk
         self.end2end = end2end
+        
+        # ==================== MOTION DIFF (optional) ====================
+        self.use_motion_diff = cfg.get('use_motion_diff', False)
+        if self.use_motion_diff:
+            self.motion_diff = MotionDiffModule()
+            print("  ✅ Motion Diff Module ENABLED (4-channel input)")
 
         # ==================== BACKBONE ====================
         self.backbone_2d, bk_dim_2d = build_backbone_2d(
@@ -391,6 +433,11 @@ class YOWOMultiTaskV2(nn.Module):
         B, _, _, img_h, img_w = video_clips.shape
         
         key_frame = video_clips[:, :, -1, :, :]
+        
+        # Apply motion diff if enabled (adds 4th channel)
+        if self.use_motion_diff:
+            video_clips = self.motion_diff(video_clips)
+        
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         
@@ -491,6 +538,11 @@ class YOWOMultiTaskV2(nn.Module):
             return self.inference(video_clips)
         
         key_frame = video_clips[:, :, -1, :, :]
+        
+        # Apply motion diff if enabled (adds 4th channel)
+        if self.use_motion_diff:
+            video_clips = self.motion_diff(video_clips)
+        
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         

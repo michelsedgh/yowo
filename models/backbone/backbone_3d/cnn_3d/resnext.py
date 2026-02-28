@@ -84,11 +84,13 @@ class ResNeXt(nn.Module):
                  block,
                  layers,
                  shortcut_type='B',
-                 cardinality=32):
+                 cardinality=32,
+                 in_channels=3):
         self.inplanes = 64
+        self.in_channels = in_channels
         super(ResNeXt, self).__init__()
         self.conv1 = nn.Conv3d(
-            3,
+            in_channels,
             64,
             kernel_size=7,
             stride=(1, 2, 2),
@@ -194,8 +196,19 @@ def load_weight(model, arch):
             shape_model = tuple(model_state_dict[k].shape)
             shape_checkpoint = tuple(new_state_dict[k].shape)
             if shape_model != shape_checkpoint:
-                new_state_dict.pop(k)
-                # print(k)
+                # Special handling for conv1.weight when using motion diff (4 channels)
+                if k == 'conv1.weight' and shape_model[1] == 4 and shape_checkpoint[1] == 3:
+                    # Copy RGB weights to first 3 channels, init motion channel with small values
+                    old_weight = new_state_dict[k]  # [64, 3, 7, 7, 7]
+                    new_weight = torch.zeros(shape_model)  # [64, 4, 7, 7, 7]
+                    new_weight[:, :3] = old_weight
+                    # Initialize motion diff channel with small random values (scaled from RGB mean)
+                    new_weight[:, 3:4] = 0.1 * old_weight.mean(dim=1, keepdim=True)
+                    new_state_dict[k] = new_weight
+                    print(f'  ✅ Expanded conv1.weight from 3→4 channels for motion diff')
+                else:
+                    new_state_dict.pop(k)
+                    # print(k)
         else:
             new_state_dict.pop(k)
             # print(k)
@@ -239,17 +252,19 @@ def resnext152(pretrained=False, **kwargs):
 
 
 # build 3D resnet
-def build_resnext_3d(model_name='resnext101', pretrained=True):
+def build_resnext_3d(model_name='resnext101', pretrained=True, use_motion_diff=False):
+    in_channels = 4 if use_motion_diff else 3
+    
     if model_name == 'resnext50':
-        model = resnext50(pretrained=pretrained)
+        model = resnext50(pretrained=pretrained, in_channels=in_channels)
         feats = 2048
 
     elif model_name == 'resnext101':
-        model = resnext101(pretrained=pretrained)
+        model = resnext101(pretrained=pretrained, in_channels=in_channels)
         feats = 2048
 
     elif model_name == 'resnext152':
-        model = resnext152(pretrained=pretrained)
+        model = resnext152(pretrained=pretrained, in_channels=in_channels)
         feats = 2048
 
     return model, feats

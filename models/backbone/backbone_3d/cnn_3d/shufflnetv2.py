@@ -117,9 +117,10 @@ class InvertedResidual(nn.Module):
 
 # ShuffleNet-v2
 class ShuffleNetV2(nn.Module):
-    def __init__(self, width_mult='1.0x', num_classes=600):
+    def __init__(self, width_mult='1.0x', num_classes=600, in_channels=3):
         super(ShuffleNetV2, self).__init__()
         
+        self.in_channels = in_channels
         self.stage_repeats = [4, 8, 4]
         # index 0 is invalid and should never be called.
         # only used for indexing convenience.
@@ -136,7 +137,7 @@ class ShuffleNetV2(nn.Module):
 
         # building first layer
         input_channel = self.stage_out_channels[1]
-        self.conv1 = conv_bn(3, input_channel, stride=(1,2,2))
+        self.conv1 = conv_bn(in_channels, input_channel, stride=(1,2,2))
         self.maxpool = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
         
         self.features = []
@@ -196,11 +197,22 @@ def load_weight(model, arch):
             shape_model = tuple(model_state_dict[k].shape)
             shape_checkpoint = tuple(new_state_dict[k].shape)
             if shape_model != shape_checkpoint:
-                new_state_dict.pop(k)
-                print(k)
+                # Special handling for conv1 when using motion diff (4 channels)
+                if 'conv1' in k and 'weight' in k and shape_model[1] == 4 and shape_checkpoint[1] == 3:
+                    # Copy RGB weights to first 3 channels, init motion channel with small values
+                    old_weight = new_state_dict[k]  # [out, 3, T, H, W]
+                    new_weight = torch.zeros(shape_model)  # [out, 4, T, H, W]
+                    new_weight[:, :3] = old_weight
+                    # Initialize motion diff channel with small random values
+                    new_weight[:, 3:4] = 0.1 * old_weight.mean(dim=1, keepdim=True)
+                    new_state_dict[k] = new_weight
+                    print(f'  ✅ Expanded {k} from 3→4 channels for motion diff')
+                else:
+                    new_state_dict.pop(k)
+                    # print(k)
         else:
             new_state_dict.pop(k)
-            print(k)
+            # print(k)
 
     model.load_state_dict(new_state_dict)
         
@@ -208,8 +220,9 @@ def load_weight(model, arch):
 
 
 # build 3D shufflenet_v2
-def build_shufflenetv2_3d(model_size='0.25x', pretrained=False):
-    model = ShuffleNetV2(model_size)
+def build_shufflenetv2_3d(model_size='0.25x', pretrained=False, use_motion_diff=False):
+    in_channels = 4 if use_motion_diff else 3
+    model = ShuffleNetV2(model_size, in_channels=in_channels)
     feats = model.stage_out_channels[-1]
 
     if pretrained:
