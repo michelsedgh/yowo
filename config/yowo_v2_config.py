@@ -409,6 +409,29 @@ yowo_v2_config = {
         'multi_task': True,
     },
 
+    # YOLO26S + ResNeXt101 - Faster 2D, powerful 3D temporal backbone
+    # Good balance: fast spatial features + strong temporal features
+    'yowo_v2_resnext_yolo26s_multitask': {
+        # backbone
+        ## 2D - YOLO26S (small - fast spatial features)
+        'backbone_2d': 'yolo26s',
+        'pretrained_2d': True,
+        'stride': [8, 16, 32],
+        ## 3D - ResNeXt101 (powerful temporal backbone)
+        'backbone_3d': 'resnext101',
+        'pretrained_3d': True,
+        'memory_momentum': 0.9,
+        # head
+        'head_dim': 256,
+        'head_norm': 'GN',
+        'head_act': 'silu',
+        'num_cls_heads': 2,
+        'num_reg_heads': 2,
+        'head_depthwise': False,
+        # multi-task flag
+        'multi_task': True,
+    },
+
     # =========================================================================
     # SHUFFLENET 1.0x VARIANTS (Lighter 3D backbone, faster inference)
     # Use these if 2.0x is too slow at high resolutions
