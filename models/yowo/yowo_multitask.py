@@ -304,6 +304,13 @@ class YOWOMultiTaskV2(nn.Module):
         self.topk = topk
         self.end2end = end2end
         
+        # ==================== 3D BACKBONE RESOLUTION ====================
+        # ResNeXt-3D Kinetics pretrained uses 112x112 spatial resolution
+        # Using native resolution improves temporal features and reduces computation
+        self.backbone_3d_size = cfg.get('backbone_3d_size', None)  # None = same as input
+        if self.backbone_3d_size:
+            print(f"  ✅ 3D Backbone will use {self.backbone_3d_size}x{self.backbone_3d_size} resolution (native Kinetics)")
+        
         # ==================== MOTION MODULES (optional) ====================
         # Options: 'motion_diff' (4ch), 'optical_flow' (5ch), 'motion_enhanced' (6ch), or False
         self.use_motion_diff = cfg.get('use_motion_diff', False)
@@ -547,7 +554,16 @@ class YOWOMultiTaskV2(nn.Module):
         if self.motion_module is not None:
             video_clips = self.motion_module(video_clips)
         
-        feat_3d = self.backbone_3d(video_clips)
+        # Resize video clips for 3D backbone if using native resolution (e.g., 112x112)
+        if self.backbone_3d_size and video_clips.shape[-1] != self.backbone_3d_size:
+            B, C, T, H, W = video_clips.shape
+            video_clips_3d = video_clips.permute(0, 2, 1, 3, 4).reshape(B * T, C, H, W)
+            video_clips_3d = F.interpolate(video_clips_3d, size=(self.backbone_3d_size, self.backbone_3d_size), mode='bilinear', align_corners=False)
+            video_clips_3d = video_clips_3d.reshape(B, T, C, self.backbone_3d_size, self.backbone_3d_size).permute(0, 2, 1, 3, 4)
+        else:
+            video_clips_3d = video_clips
+        
+        feat_3d = self.backbone_3d(video_clips_3d)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         
         all_conf = []
@@ -652,7 +668,17 @@ class YOWOMultiTaskV2(nn.Module):
         if self.motion_module is not None:
             video_clips = self.motion_module(video_clips)
         
-        feat_3d = self.backbone_3d(video_clips)
+        # Resize video clips for 3D backbone if using native resolution (e.g., 112x112)
+        if self.backbone_3d_size and video_clips.shape[-1] != self.backbone_3d_size:
+            # [B, C, T, H, W] -> resize spatial dims only
+            B, C, T, H, W = video_clips.shape
+            video_clips_3d = video_clips.permute(0, 2, 1, 3, 4).reshape(B * T, C, H, W)
+            video_clips_3d = F.interpolate(video_clips_3d, size=(self.backbone_3d_size, self.backbone_3d_size), mode='bilinear', align_corners=False)
+            video_clips_3d = video_clips_3d.reshape(B, T, C, self.backbone_3d_size, self.backbone_3d_size).permute(0, 2, 1, 3, 4)
+        else:
+            video_clips_3d = video_clips
+        
+        feat_3d = self.backbone_3d(video_clips_3d)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
         
         o2m_outputs = self._forward_all_levels(cls_feats, reg_feats, feat_3d, use_o2o=False)

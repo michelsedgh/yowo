@@ -246,12 +246,13 @@ yowo_v2_config = {
         'backbone_2d': 'yolo11m',
         'pretrained_2d': True,
         'stride': [8, 16, 32],
-        ## 3D - ResNeXt101 (original YOWO backbone)
+        ## 3D - ResNeXt101 (resize to 224 for fine-grained action tracking)
         'backbone_3d': 'resnext101',
+        'backbone_3d_size': 224,  # 224px keeps small objects visible
         'pretrained_3d': True,
         'memory_momentum': 0.9,
-        # head - larger dim for ResNeXt's 2048 features
-        'head_dim': 256,
+        # head - increased to 384 for better feature capacity
+        'head_dim': 384,
         'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
@@ -297,12 +298,13 @@ yowo_v2_config = {
         'backbone_2d': 'yolo26l',
         'pretrained_2d': True,
         'stride': [8, 16, 32],
-        ## 3D - ResNeXt101 (proven temporal backbone)
+        ## 3D - ResNeXt101 (resize to 224 for fine-grained action tracking)
         'backbone_3d': 'resnext101',
+        'backbone_3d_size': 224,  # 224px keeps small objects visible
         'pretrained_3d': True,
         'memory_momentum': 0.9,
-        # head - larger dim for ResNeXt's 2048 features
-        'head_dim': 256,
+        # head - increased to 384 for better feature capacity
+        'head_dim': 384,
         'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
@@ -319,12 +321,13 @@ yowo_v2_config = {
         'backbone_2d': 'yolo26m',
         'pretrained_2d': True,
         'stride': [8, 16, 32],
-        ## 3D - ResNeXt101
+        ## 3D - ResNeXt101 (resize to 224 for fine-grained action tracking)
         'backbone_3d': 'resnext101',
+        'backbone_3d_size': 224,  # 224px keeps small objects visible (112px too small for phones/cups)
         'pretrained_3d': True,
         'memory_momentum': 0.9,
-        # head
-        'head_dim': 256,
+        # head - increased from 256 to 384 for better feature capacity
+        'head_dim': 384,
         'head_norm': 'GN',  # GroupNorm - safe for O2M/O2O dual-forward
         'head_act': 'silu',
         'num_cls_heads': 2,
@@ -424,12 +427,13 @@ yowo_v2_config = {
         'backbone_2d': 'yolo26s',
         'pretrained_2d': True,
         'stride': [8, 16, 32],
-        ## 3D - ResNeXt101 (powerful temporal backbone)
+        ## 3D - ResNeXt101 (resize to 224 for fine-grained action tracking)
         'backbone_3d': 'resnext101',
+        'backbone_3d_size': 224,  # 224px keeps small objects visible
         'pretrained_3d': True,
         'memory_momentum': 0.9,
-        # head
-        'head_dim': 256,
+        # head - increased to 384 for better feature capacity
+        'head_dim': 384,
         'head_norm': 'GN',
         'head_act': 'silu',
         'num_cls_heads': 2,

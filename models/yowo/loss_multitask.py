@@ -164,6 +164,23 @@ class MultiTaskCriterion(object):
         self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
         print(f"  Using object class weights (rare classes upweighted 8-15x)")
         
+        # Action class weights - loaded from smart_home config if available
+        # These weights upweight rare actions (e.g., "awakening" 2.18x, "shoes" 2.45x)
+        # Focal Loss handles easy/hard imbalance, class weights handle frequency imbalance
+        self.act_class_weights = None
+        try:
+            import json
+            import os
+            config_path = os.path.join(os.path.dirname(__file__), '../../config/smart_home_final.json')
+            if os.path.exists(config_path):
+                with open(config_path) as f:
+                    smart_home_cfg = json.load(f)
+                if 'action_class_weights' in smart_home_cfg and num_actions == smart_home_cfg.get('num_actions', 0):
+                    self.act_class_weights = torch.tensor(smart_home_cfg['action_class_weights'], dtype=torch.float32)
+                    print(f"  Using action class weights from smart_home config (36 classes, range {self.act_class_weights.min():.2f}-{self.act_class_weights.max():.2f})")
+        except Exception as e:
+            print(f"  Warning: Could not load action class weights: {e}")
+        
         # Focal Loss for actions and relations (handles class imbalance)
         if use_focal_loss:
             print("  Using Focal Loss (gamma=1.0) for actions and relations")
@@ -343,15 +360,17 @@ class MultiTaskCriterion(object):
             loss_obj = torch.tensor(0.0, device=device)
 
         # Action loss (Focal/BCE - multi-label, PERSON-ONLY)
-        # CRITICAL FIX: Removed IoU weighting - it was killing 86% of gradients!
-        # Hard targets (0/1) already encode correctness. IoU weighting prevents
-        # the model from LEARNING to make better boxes by dampening gradients.
+        # Uses class weights to upweight rare actions (e.g., "awakening" 2.18x)
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0 and is_person_masks.sum() > 0:
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
             loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
-            loss_act = loss_act.sum() / num_fg  # No IoU weighting!
+            # Apply action class weights if available (upweights rare actions)
+            if self.act_class_weights is not None:
+                act_weights = self.act_class_weights.to(device)
+                loss_act = loss_act * act_weights.unsqueeze(0)  # [N, C] * [1, C]
+            loss_act = loss_act.sum() / num_fg
         else:
             loss_act = torch.tensor(0.0, device=device)
 

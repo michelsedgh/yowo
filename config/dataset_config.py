@@ -73,8 +73,9 @@ dataset_config = {
     },
 
     'smart_home': {
-        # Smart Home dataset - filtered Charades-AG with 42 actions
-        # Same as charades_ag but with reduced action classes
+        # Smart Home dataset - filtered Charades-AG with 36 actions
+        # Removed: laughing, pillow, window (x2), laughing at TV
+        # Merged: awakening in bed + awakening somewhere = awakening
         'data_root': 'data/ActionGenome/',
         'train_size': 224,
         'test_size': 224,
@@ -94,11 +95,11 @@ dataset_config = {
         'warmup': 'linear',
         'warmup_factor': 0.00066667,
         'wp_iter': 500,
-        # class counts for Smart Home (filtered)
+        # class counts for Smart Home (filtered + merged)
         'num_objects': 36,    # AG objects (unchanged)
-        'num_actions': 42,    # Smart home action classes (was 157)
+        'num_actions': 35,    # Smart home actions (merged: phone, books, laptop, lying, medicine, awakening, eating)
         'num_relations': 26,  # AG relationship classes (unchanged)
-        'valid_num_classes': 104,  # Total: 36 + 42 + 26 = 104
+        'valid_num_classes': 97,  # Total: 36 + 35 + 26 = 97
     }
 }
 
