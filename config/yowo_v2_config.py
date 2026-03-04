@@ -332,6 +332,8 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
+        # Motion Enhanced: RGB + diff + flow_x + flow_y (6 channels)
+        'use_motion_enhanced': True,
     },
 
     # YOLO26L + ShuffleNetV2 - Fast inference with strong 2D features
@@ -384,6 +386,8 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
+        # Motion Enhanced: RGB + diff + flow_x + flow_y (6 channels)
+        'use_motion_enhanced': True,
     },
 
     # YOLO26S + ShuffleNetV2 2.0x - Even faster, smaller 2D backbone
@@ -407,8 +411,9 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
-        # Motion diff: explicit motion channel for better temporal actions
-        'use_motion_diff': True,
+        # Motion Enhanced: RGB + diff + flow_x + flow_y (6 channels)
+        # Best for motion-based actions like walking, running
+        'use_motion_enhanced': True,
     },
 
     # YOLO26S + ResNeXt101 - Faster 2D, powerful 3D temporal backbone
@@ -432,8 +437,8 @@ yowo_v2_config = {
         'head_depthwise': False,
         # multi-task flag
         'multi_task': True,
-        # Motion diff: explicit motion channel for better temporal actions
-        'use_motion_diff': True,
+        # Motion Enhanced: RGB + diff + flow_x + flow_y (6 channels)
+        'use_motion_enhanced': True,
     },
 
     # =========================================================================

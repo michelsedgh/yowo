@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -109,9 +110,16 @@ class CharadesAGDataset(Dataset):
         
         # 1. Load video clip (len_clip frames)
         # We sample frames ending at the keyframe
+        # VARIABLE SAMPLING: Like original YOWO, randomly choose rate during training
+        # This helps the model learn both fine-grained and coarse temporal patterns
+        if self.is_train:
+            d = random.randint(1, 2)  # Random sampling rate 1 or 2
+        else:
+            d = self.sampling_rate  # Fixed rate during eval
+        
         video_clip = []
         for i in range(self.len_clip):
-            f = frame_idx - (self.len_clip - 1 - i) * self.sampling_rate
+            f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
             
             # Check for JPG first (since that's our new standard), then fallback to PNG

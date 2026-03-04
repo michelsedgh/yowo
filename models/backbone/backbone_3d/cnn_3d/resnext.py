@@ -196,16 +196,17 @@ def load_weight(model, arch):
             shape_model = tuple(model_state_dict[k].shape)
             shape_checkpoint = tuple(new_state_dict[k].shape)
             if shape_model != shape_checkpoint:
-                # Special handling for conv1.weight when using motion diff (4 channels)
-                if k == 'conv1.weight' and shape_model[1] == 4 and shape_checkpoint[1] == 3:
-                    # Copy RGB weights to first 3 channels, init motion channel with small values
+                # Special handling for conv1.weight when using motion modules (4/5/6 channels)
+                if k == 'conv1.weight' and shape_model[1] > 3 and shape_checkpoint[1] == 3:
+                    # Copy RGB weights to first 3 channels, init extra channels with small values
                     old_weight = new_state_dict[k]  # [64, 3, 7, 7, 7]
-                    new_weight = torch.zeros(shape_model)  # [64, 4, 7, 7, 7]
+                    new_weight = torch.zeros(shape_model)  # [64, 4/5/6, 7, 7, 7]
                     new_weight[:, :3] = old_weight
-                    # Initialize motion diff channel with small random values (scaled from RGB mean)
-                    new_weight[:, 3:4] = 0.1 * old_weight.mean(dim=1, keepdim=True)
+                    # Initialize extra channels with small random values (scaled from RGB mean)
+                    for ch in range(3, shape_model[1]):
+                        new_weight[:, ch:ch+1] = 0.1 * old_weight.mean(dim=1, keepdim=True)
                     new_state_dict[k] = new_weight
-                    print(f'  ✅ Expanded conv1.weight from 3→4 channels for motion diff')
+                    print(f'  ✅ Expanded conv1.weight from 3→{shape_model[1]} channels for motion module')
                 else:
                     new_state_dict.pop(k)
                     # print(k)
@@ -252,8 +253,20 @@ def resnext152(pretrained=False, **kwargs):
 
 
 # build 3D resnet
-def build_resnext_3d(model_name='resnext101', pretrained=True, use_motion_diff=False):
-    in_channels = 4 if use_motion_diff else 3
+def build_resnext_3d(model_name='resnext101', pretrained=True, use_motion_diff=False,
+                     use_optical_flow=False, use_motion_enhanced=False):
+    # Determine input channels based on motion module
+    # motion_diff: 4ch (RGB + diff)
+    # optical_flow: 5ch (RGB + flow_x + flow_y)
+    # motion_enhanced: 6ch (RGB + diff + flow_x + flow_y)
+    if use_motion_enhanced:
+        in_channels = 6
+    elif use_optical_flow:
+        in_channels = 5
+    elif use_motion_diff:
+        in_channels = 4
+    else:
+        in_channels = 3
     
     if model_name == 'resnext50':
         model = resnext50(pretrained=pretrained, in_channels=in_channels)

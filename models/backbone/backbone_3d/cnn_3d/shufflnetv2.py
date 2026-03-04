@@ -197,16 +197,17 @@ def load_weight(model, arch):
             shape_model = tuple(model_state_dict[k].shape)
             shape_checkpoint = tuple(new_state_dict[k].shape)
             if shape_model != shape_checkpoint:
-                # Special handling for conv1 when using motion diff (4 channels)
-                if 'conv1' in k and 'weight' in k and shape_model[1] == 4 and shape_checkpoint[1] == 3:
-                    # Copy RGB weights to first 3 channels, init motion channel with small values
+                # Special handling for conv1 when using motion modules (4/5/6 channels)
+                if 'conv1' in k and 'weight' in k and shape_model[1] > 3 and shape_checkpoint[1] == 3:
+                    # Copy RGB weights to first 3 channels, init extra channels with small values
                     old_weight = new_state_dict[k]  # [out, 3, T, H, W]
-                    new_weight = torch.zeros(shape_model)  # [out, 4, T, H, W]
+                    new_weight = torch.zeros(shape_model)  # [out, 4/5/6, T, H, W]
                     new_weight[:, :3] = old_weight
-                    # Initialize motion diff channel with small random values
-                    new_weight[:, 3:4] = 0.1 * old_weight.mean(dim=1, keepdim=True)
+                    # Initialize extra channels with small random values
+                    for ch in range(3, shape_model[1]):
+                        new_weight[:, ch:ch+1] = 0.1 * old_weight.mean(dim=1, keepdim=True)
                     new_state_dict[k] = new_weight
-                    print(f'  ✅ Expanded {k} from 3→4 channels for motion diff')
+                    print(f'  ✅ Expanded {k} from 3→{shape_model[1]} channels for motion module')
                 else:
                     new_state_dict.pop(k)
                     # print(k)
@@ -220,8 +221,21 @@ def load_weight(model, arch):
 
 
 # build 3D shufflenet_v2
-def build_shufflenetv2_3d(model_size='0.25x', pretrained=False, use_motion_diff=False):
-    in_channels = 4 if use_motion_diff else 3
+def build_shufflenetv2_3d(model_size='0.25x', pretrained=False, use_motion_diff=False,
+                          use_optical_flow=False, use_motion_enhanced=False):
+    # Determine input channels based on motion module
+    # motion_diff: 4ch (RGB + diff)
+    # optical_flow: 5ch (RGB + flow_x + flow_y)
+    # motion_enhanced: 6ch (RGB + diff + flow_x + flow_y)
+    if use_motion_enhanced:
+        in_channels = 6
+    elif use_optical_flow:
+        in_channels = 5
+    elif use_motion_diff:
+        in_channels = 4
+    else:
+        in_channels = 3
+    
     model = ShuffleNetV2(model_size, in_channels=in_channels)
     feats = model.stage_out_channels[-1]
 

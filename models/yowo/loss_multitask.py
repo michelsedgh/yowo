@@ -117,7 +117,52 @@ class MultiTaskCriterion(object):
         
         # Loss functions
         self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
-        self.obj_lossf = nn.CrossEntropyLoss(reduction='none')
+        
+        # Object class weights - inverse frequency weighting for rare classes
+        # Based on Action Genome object distribution (approximate counts from training data)
+        # Higher weight = rarer class, gets more attention during training
+        obj_class_weights = torch.tensor([
+            0.5,   # 0: person (very common - 11000+ samples) - downweight
+            8.0,   # 1: bag (rare)
+            3.0,   # 2: bed
+            5.0,   # 3: blanket
+            6.0,   # 4: book
+            8.0,   # 5: box (rare)
+            10.0,  # 6: broom (rare)
+            1.5,   # 7: chair (common)
+            8.0,   # 8: closetcabinet
+            6.0,   # 9: clothes
+            5.0,   # 10: cupglassbottle
+            10.0,  # 11: dish (rare)
+            4.0,   # 12: door
+            15.0,  # 13: doorknob (very rare)
+            4.0,   # 14: doorway
+            6.0,   # 15: floor
+            6.0,   # 16: food
+            15.0,  # 17: groceries (very rare)
+            3.0,   # 18: laptop
+            15.0,  # 19: light (very rare)
+            15.0,  # 20: medicine (very rare)
+            8.0,   # 21: mirror
+            10.0,  # 22: papernotebook
+            5.0,   # 23: phonecamera
+            15.0,  # 24: picture (very rare)
+            8.0,   # 25: pillow
+            10.0,  # 26: refrigerator
+            15.0,  # 27: sandwich (very rare)
+            10.0,  # 28: shelf
+            10.0,  # 29: shoe
+            4.0,   # 30: sofacouch
+            1.5,   # 31: table (common)
+            4.0,   # 32: television
+            10.0,  # 33: towel
+            10.0,  # 34: vacuum
+            10.0,  # 35: window
+        ], dtype=torch.float32)
+        self.register_buffer_fn = None  # Will move to device when needed
+        self.obj_class_weights = obj_class_weights
+        self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
+        print(f"  Using object class weights (rare classes upweighted 8-15x)")
         
         # Focal Loss for actions and relations (handles class imbalance)
         if use_focal_loss:
@@ -285,9 +330,13 @@ class MultiTaskCriterion(object):
         loss_conf = self.conf_lossf(conf_preds.view(-1, 1), conf_targets)
         loss_conf = loss_conf.sum() / num_fg
 
-        # Object loss (CrossEntropy - exclusive class)
+        # Object loss (CrossEntropy - exclusive class, with class weights)
         matched_obj_preds = obj_preds.view(-1, self.num_objects)[fg_masks]
         if len(obj_targets) > 0:
+            # Move class weights to correct device if needed
+            if self.obj_class_weights.device != device:
+                self.obj_class_weights = self.obj_class_weights.to(device)
+                self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none')
             loss_obj = self.obj_lossf(matched_obj_preds, obj_targets)
             loss_obj = loss_obj.sum() / num_fg
         else:

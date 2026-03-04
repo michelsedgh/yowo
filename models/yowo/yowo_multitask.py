@@ -66,6 +66,103 @@ class MotionDiffModule(nn.Module):
         return torch.cat([x, diff], dim=1)
 
 
+class OpticalFlowModule(nn.Module):
+    """
+    Compute approximate optical flow using Lucas-Kanade style gradients.
+    
+    Unlike MotionDiff which only shows WHERE change happened,
+    optical flow shows HOW things moved (direction + magnitude).
+    
+    Uses spatial gradients (Ix, Iy) and temporal gradient (It) to estimate
+    motion vectors (u, v) via: Ix*u + Iy*v + It = 0
+    
+    Input:  [B, 3, T, H, W] - RGB video clip
+    Output: [B, 5, T, H, W] - RGB + flow_x + flow_y
+    
+    Note: This is a simplified Horn-Schunck style flow, not full optical flow.
+    Full optical flow (like RAFT) would be better but much slower.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # Sobel filters for spatial gradients
+        sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32)
+        sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32)
+        # Register as buffers (not parameters, but move to device with model)
+        self.register_buffer('sobel_x', sobel_x.view(1, 1, 3, 3))
+        self.register_buffer('sobel_y', sobel_y.view(1, 1, 3, 3))
+    
+    def forward(self, x):
+        # x: [B, 3, T, H, W]
+        B, C, T, H, W = x.shape
+        
+        # Convert to grayscale: [B, 1, T, H, W]
+        gray = 0.299 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.114 * x[:, 2:3]
+        
+        # Compute flow for each frame pair
+        flow_x = torch.zeros(B, 1, T, H, W, device=x.device, dtype=x.dtype)
+        flow_y = torch.zeros(B, 1, T, H, W, device=x.device, dtype=x.dtype)
+        
+        for t in range(1, T):
+            # Get consecutive frames
+            I1 = gray[:, :, t-1]  # [B, 1, H, W]
+            I2 = gray[:, :, t]    # [B, 1, H, W]
+            
+            # Spatial gradients (averaged over both frames for stability)
+            Ix = F.conv2d(I1, self.sobel_x, padding=1) + F.conv2d(I2, self.sobel_x, padding=1)
+            Iy = F.conv2d(I1, self.sobel_y, padding=1) + F.conv2d(I2, self.sobel_y, padding=1)
+            Ix = Ix / 2.0
+            Iy = Iy / 2.0
+            
+            # Temporal gradient
+            It = I2 - I1
+            
+            # Simple flow estimate: u = -It*Ix / (Ix^2 + Iy^2 + eps)
+            #                       v = -It*Iy / (Ix^2 + Iy^2 + eps)
+            # This is a simplified Lucas-Kanade for a single pixel
+            grad_mag_sq = Ix**2 + Iy**2 + 1e-6
+            flow_x[:, :, t] = -It * Ix / grad_mag_sq
+            flow_y[:, :, t] = -It * Iy / grad_mag_sq
+        
+        # Normalize flow to [0, 1] range (typical flow is small, but can spike)
+        # Clamp to reasonable range then shift
+        flow_x = torch.clamp(flow_x, -0.5, 0.5) + 0.5  # [0, 1]
+        flow_y = torch.clamp(flow_y, -0.5, 0.5) + 0.5  # [0, 1]
+        
+        # Concatenate: [B, 5, T, H, W] = RGB + flow_x + flow_y
+        return torch.cat([x, flow_x, flow_y], dim=1)
+
+
+class MotionEnhancedModule(nn.Module):
+    """
+    Combined motion module: Motion Diff + Optical Flow.
+    
+    Motion Diff shows WHERE change happened (intensity).
+    Optical Flow shows HOW things moved (direction).
+    Together they provide rich motion representation.
+    
+    Input:  [B, 3, T, H, W] - RGB video clip
+    Output: [B, 6, T, H, W] - RGB + diff + flow_x + flow_y
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.motion_diff = MotionDiffModule()
+        self.optical_flow = OpticalFlowModule()
+    
+    def forward(self, x):
+        # Get motion diff: [B, 4, T, H, W] = RGB + diff
+        x_diff = self.motion_diff(x)
+        diff_channel = x_diff[:, 3:4]  # Just the diff channel
+        
+        # Get optical flow: [B, 5, T, H, W] = RGB + flow_x + flow_y
+        x_flow = self.optical_flow(x)
+        flow_channels = x_flow[:, 3:5]  # flow_x, flow_y
+        
+        # Combine: [B, 6, T, H, W] = RGB + diff + flow_x + flow_y
+        return torch.cat([x, diff_channel, flow_channels], dim=1)
+
+
 class LocalContextModule(nn.Module):
     """
     Simple local context: pool nearby object predictions to enrich features.
@@ -207,11 +304,23 @@ class YOWOMultiTaskV2(nn.Module):
         self.topk = topk
         self.end2end = end2end
         
-        # ==================== MOTION DIFF (optional) ====================
+        # ==================== MOTION MODULES (optional) ====================
+        # Options: 'motion_diff' (4ch), 'optical_flow' (5ch), 'motion_enhanced' (6ch), or False
         self.use_motion_diff = cfg.get('use_motion_diff', False)
-        if self.use_motion_diff:
-            self.motion_diff = MotionDiffModule()
-            print("  ✅ Motion Diff Module ENABLED (4-channel input)")
+        self.use_optical_flow = cfg.get('use_optical_flow', False)
+        self.use_motion_enhanced = cfg.get('use_motion_enhanced', False)
+        
+        if self.use_motion_enhanced:
+            self.motion_module = MotionEnhancedModule()
+            print("  ✅ Motion Enhanced Module ENABLED (6-channel: RGB + diff + flow_x + flow_y)")
+        elif self.use_optical_flow:
+            self.motion_module = OpticalFlowModule()
+            print("  ✅ Optical Flow Module ENABLED (5-channel: RGB + flow_x + flow_y)")
+        elif self.use_motion_diff:
+            self.motion_module = MotionDiffModule()
+            print("  ✅ Motion Diff Module ENABLED (4-channel: RGB + diff)")
+        else:
+            self.motion_module = None
 
         # ==================== BACKBONE ====================
         self.backbone_2d, bk_dim_2d = build_backbone_2d(
@@ -434,9 +543,9 @@ class YOWOMultiTaskV2(nn.Module):
         
         key_frame = video_clips[:, :, -1, :, :]
         
-        # Apply motion diff if enabled (adds 4th channel)
-        if self.use_motion_diff:
-            video_clips = self.motion_diff(video_clips)
+        # Apply motion module if enabled (adds extra channels)
+        if self.motion_module is not None:
+            video_clips = self.motion_module(video_clips)
         
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
@@ -539,9 +648,9 @@ class YOWOMultiTaskV2(nn.Module):
         
         key_frame = video_clips[:, :, -1, :, :]
         
-        # Apply motion diff if enabled (adds 4th channel)
-        if self.use_motion_diff:
-            video_clips = self.motion_diff(video_clips)
+        # Apply motion module if enabled (adds extra channels)
+        if self.motion_module is not None:
+            video_clips = self.motion_module(video_clips)
         
         feat_3d = self.backbone_3d(video_clips)
         cls_feats, reg_feats = self.backbone_2d(key_frame)
