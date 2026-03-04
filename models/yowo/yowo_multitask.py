@@ -574,7 +574,10 @@ class YOWOMultiTaskV2(nn.Module):
         use_o2o = self.end2end
         
         for level, (cls_f, reg_f) in enumerate(zip(cls_feats, reg_feats)):
-            feat_3d_up = F.interpolate(feat_3d, scale_factor=2 ** (2 - level))
+            # Interpolate 3D features to match 2D feature spatial size
+            # This handles cases where 3D backbone uses different resolution (e.g., 224x224)
+            target_size = cls_f.shape[-2:]  # (H, W) of 2D features
+            feat_3d_up = F.interpolate(feat_3d, size=target_size, mode='bilinear', align_corners=False)
             
             conf_l, obj_l, rel_l, act_l, reg_l = \
                 self._forward_single_level(level, cls_f, reg_f, feat_3d_up, use_o2o=use_o2o)
@@ -709,7 +712,10 @@ class YOWOMultiTaskV2(nn.Module):
         all_anchors = []
         
         for level, (cls_f, reg_f) in enumerate(zip(cls_feats, reg_feats)):
-            feat_3d_up = F.interpolate(feat_3d, scale_factor=2 ** (2 - level))
+            # Interpolate 3D features to match 2D feature spatial size
+            # This handles cases where 3D backbone uses different resolution (e.g., 224x224)
+            target_size = cls_f.shape[-2:]  # (H, W) of 2D features
+            feat_3d_up = F.interpolate(feat_3d, size=target_size, mode='bilinear', align_corners=False)
             
             conf_l, obj_l, rel_l, act_l, reg_l = \
                 self._forward_single_level(level, cls_f, reg_f, feat_3d_up, use_o2o=use_o2o)
