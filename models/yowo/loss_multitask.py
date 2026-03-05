@@ -177,16 +177,20 @@ class MultiTaskCriterion(object):
                     smart_home_cfg = json.load(f)
                 if 'action_class_weights' in smart_home_cfg and num_actions == smart_home_cfg.get('num_actions', 0):
                     self.act_class_weights = torch.tensor(smart_home_cfg['action_class_weights'], dtype=torch.float32)
-                    print(f"  Using action class weights from smart_home config (36 classes, range {self.act_class_weights.min():.2f}-{self.act_class_weights.max():.2f})")
+                    print(f"  Using action class weights from smart_home config ({len(self.act_class_weights)} classes, range {self.act_class_weights.min():.2f}-{self.act_class_weights.max():.2f})")
         except Exception as e:
             print(f"  Warning: Could not load action class weights: {e}")
         
         # Focal Loss for actions and relations (handles class imbalance)
         if use_focal_loss:
-            print("  Using Focal Loss (gamma=1.0) for actions and relations")
+            print("  Using Focal Loss (gamma=1.0, alpha=0.75) for actions and relations")
             # gamma=1.0 for faster early learning (was 2.0, too aggressive for epoch 1-5)
-            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=1.0, reduction='none')
-            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=1.0, reduction='none')
+            # CRITICAL FIX: alpha=0.75 upweights positive samples (was 0.25 which penalized them 3x)
+            # For multi-label action detection, we want to ENCOURAGE predicting positives for rare classes
+            # alpha=0.25 was designed for object detection with massive background imbalance (>100:1)
+            # Action detection has ~20:1 imbalance per class, so alpha=0.75 is more appropriate
+            self.act_lossf = SigmoidFocalLoss(alpha=0.75, gamma=1.0, reduction='none')
+            self.rel_lossf = SigmoidFocalLoss(alpha=0.75, gamma=1.0, reduction='none')
         else:
             print("  Using standard BCE for actions and relations")
             self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
@@ -370,7 +374,11 @@ class MultiTaskCriterion(object):
             if self.act_class_weights is not None:
                 act_weights = self.act_class_weights.to(device)
                 loss_act = loss_act * act_weights.unsqueeze(0)  # [N, C] * [1, C]
-            loss_act = loss_act.sum() / num_fg
+            # CRITICAL FIX: Divide by PERSON fg count, not all fg
+            # Action loss is only computed on person boxes, so normalization should match
+            # Previously divided by num_fg (all boxes) which diluted the gradient by ~3x
+            num_person_fg = max(is_person_masks.sum().float(), 1.0)
+            loss_act = loss_act.sum() / num_person_fg
         else:
             loss_act = torch.tensor(0.0, device=device)
 

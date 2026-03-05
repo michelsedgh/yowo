@@ -107,12 +107,14 @@ class SmartHomeDataset(Dataset):
             # Copy objects (0:36) -> (0:36) - unchanged
             new_labels[:, :self.num_objects] = old_labels[:, :self.num_objects]
             
-            # Remap actions (36:193) -> (36:78)
-            # Only copy the smart home actions, remapped to new indices
+            # Remap actions (36:193) -> (36:num_smart_home_actions)
+            # For merged actions (multiple old indices -> same new index),
+            # use logical OR so ANY source action being active makes the merged action active
             for old_idx, new_idx in self.old_to_new.items():
                 old_pos = self.num_objects + old_idx
                 new_pos = self.num_objects + new_idx
-                new_labels[:, new_pos] = old_labels[:, old_pos]
+                # Use maximum to OR the values (handles merged actions correctly)
+                new_labels[:, new_pos] = torch.maximum(new_labels[:, new_pos], old_labels[:, old_pos])
             
             # Copy relations (193:219) -> (78:104) - unchanged but shifted
             old_rel_start = self.num_objects + 157  # 36 + 157 = 193
