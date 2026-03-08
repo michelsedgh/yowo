@@ -192,23 +192,27 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
         batch_sampler_train = torch.utils.data.BatchSampler(sampler, 
                                                             batch_size, 
                                                             drop_last=True)
-        # train dataloader
+        # train dataloader - optimized for A100
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             batch_sampler=batch_sampler_train,
             collate_fn=collate_fn, 
             num_workers=args.num_workers,
-            pin_memory=True
+            pin_memory=True,
+            persistent_workers=args.num_workers > 0,  # Keep workers alive between epochs
+            prefetch_factor=3 if args.num_workers > 0 else None  # Prefetch more batches
             )
     else:
-        # test dataloader
+        # test dataloader - optimized
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             shuffle=False,
             collate_fn=collate_fn, 
             num_workers=args.num_workers,
             drop_last=False,
-            pin_memory=True
+            pin_memory=True,
+            persistent_workers=args.num_workers > 0,
+            prefetch_factor=3 if args.num_workers > 0 else None
             )
     
     return dataloader

@@ -96,8 +96,8 @@ def parse_args():
                         help='ucf24, ava_v2.2')
     parser.add_argument('--root', default='/mnt/share/ssd2/dataset/STAD/',
                         help='data root')
-    parser.add_argument('--num_workers', default=4, type=int, 
-                        help='Number of workers used in dataloading')
+    parser.add_argument('--num_workers', default=8, type=int, 
+                        help='Number of workers used in dataloading (8+ recommended for A100)')
     parser.add_argument('-size', '--img_size', default=None, type=int,
                         help='Override train/test image size (e.g., 320, 480, 640). If not set, uses dataset config default.')
 
@@ -310,8 +310,8 @@ def train():
                 warmup = False
                 warmup_scheduler.set_lr(optimizer, lr=base_lr, base_lr=base_lr)
 
-            # to device
-            video_clips = video_clips.to(device)
+            # to device (non_blocking=True overlaps transfer with compute)
+            video_clips = video_clips.to(device, non_blocking=True)
 
             # inference and loss (with optional AMP)
             if scaler is not None:

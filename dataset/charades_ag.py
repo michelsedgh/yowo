@@ -118,24 +118,26 @@ class CharadesAGDataset(Dataset):
             d = self.sampling_rate  # Fixed rate during eval
         
         video_clip = []
+        frames_dir = os.path.join(self.data_root, 'frames', video_id_full)
         for i in range(self.len_clip):
             f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
             
-            # Check for JPG first (since that's our new standard), then fallback to PNG
-            img_path = os.path.join(self.data_root, 'frames', video_id_full, f"{f_clamped:06d}.jpg")
-            if not os.path.exists(img_path):
-                img_path = os.path.join(self.data_root, 'frames', video_id_full, f"{f_clamped:06d}.png")
+            # Try loading directly without os.path.exists (faster on network/cloud storage)
+            # Try JPG first, then PNG, then keyframe fallback
+            frame = None
+            for f_try in [f_clamped, frame_idx]:  # Try target frame, then keyframe fallback
+                for ext in ['jpg', 'png']:
+                    try:
+                        img_path = os.path.join(frames_dir, f"{f_try:06d}.{ext}")
+                        frame = Image.open(img_path).convert('RGB')
+                        break
+                    except:
+                        continue
+                if frame is not None:
+                    break
             
-            # If still not found, use the keyframe itself as a fallback
-            if not os.path.exists(img_path):
-                img_path = os.path.join(self.data_root, 'frames', video_id_full, f"{frame_idx:06d}.jpg")
-                if not os.path.exists(img_path):
-                    img_path = os.path.join(self.data_root, 'frames', video_id_full, f"{frame_idx:06d}.png")
-            
-            try:
-                frame = Image.open(img_path).convert('RGB')
-            except:
+            if frame is None:
                 frame = Image.new('RGB', (self.img_size, self.img_size))
             video_clip.append(frame)
             
