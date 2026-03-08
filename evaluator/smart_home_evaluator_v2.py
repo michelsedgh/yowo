@@ -70,11 +70,11 @@ class SmartHomeEvaluatorV2:
             sampling_rate=sampling_rate
         )
         
-        # Class info
+        # Class info - use config-driven counts
         self.num_objects = 36
-        self.num_actions = smart_home_config['num_actions']  # 42
+        self.num_actions = smart_home_config['num_actions']
         self.num_relations = 26
-        self.num_classes = 104
+        self.num_classes = self.num_objects + self.num_actions + self.num_relations
         
         self.action_names = smart_home_config['action_names']
         self.object_names = self.testset.base_dataset.ag_objects

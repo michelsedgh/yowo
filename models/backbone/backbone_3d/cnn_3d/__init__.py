@@ -1,7 +1,12 @@
 from .resnet import build_resnet_3d
 from .resnext import build_resnext_3d
 from .shufflnetv2 import build_shufflenetv2_3d
-from .x3d import build_x3d_3d
+
+# X3D is optional - only import if available
+try:
+    from .x3d import build_x3d_3d
+except ImportError:
+    build_x3d_3d = None
 
 
 def build_3d_cnn(cfg, pretrained=False):
@@ -44,6 +49,9 @@ def build_3d_cnn(cfg, pretrained=False):
             )
     elif 'x3d' in cfg['backbone_3d']:
         # X3D backbone - model_name should be 'x3d_xs', 'x3d_s', 'x3d_m', or 'x3d_l'
+        if build_x3d_3d is None:
+            print('X3D backbone requested but x3d.py not found!')
+            exit()
         model, feat_dims = build_x3d_3d(
             model_name=cfg['backbone_3d'],
             pretrained=pretrained

@@ -122,7 +122,7 @@ def build_dataset(d_cfg, args, is_train=False):
         )
 
     elif args.dataset == 'smart_home':
-        # Smart Home dataset - filtered Charades-AG with 42 actions
+        # Smart Home dataset - filtered Charades-AG
         from dataset.smart_home import SmartHomeDataset
         from evaluator.smart_home_evaluator_v2 import SmartHomeEvaluatorV2
         import json
@@ -144,8 +144,8 @@ def build_dataset(d_cfg, args, is_train=False):
             len_clip=args.len_clip,
             sampling_rate=d_cfg['sampling_rate']
         )
-        # 36 objects + 42 actions + 26 relations = 104
-        num_classes = 104
+        # Use config-driven class counts: 36 objects + N actions + 26 relations
+        num_classes = d_cfg['num_objects'] + smart_home_config['num_actions'] + d_cfg['num_relations']
         
         # Store config in args for loss function to use
         args.smart_home_config = smart_home_config

@@ -13,6 +13,7 @@ Usage:
 
 import os
 import json
+import random
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -30,8 +31,14 @@ class SmartHomeDataset(Dataset):
     """
     
     def __init__(self, cfg, data_root, is_train=False, img_size=224, 
-                 transform=None, len_clip=16, sampling_rate=1):
-        
+                 transform=None, len_clip=16, sampling_rate=1, 
+                 negative_ratio=0.12):
+        """
+        Args:
+            negative_ratio: Fraction of positive frames to add as no-action negatives.
+                           0.12 = add 12% extra frames with no smart-home actions.
+                           Set to 0 to disable (old behavior).
+        """
         # Load smart home config
         config_path = os.path.join(os.path.dirname(__file__), 
                                    '../config/smart_home_final.json')
@@ -41,6 +48,9 @@ class SmartHomeDataset(Dataset):
         self.num_smart_home_actions = self.config['num_actions']
         self.action_indices = set(self.config['action_indices'])
         self.old_to_new = {int(k): v for k, v in self.config['old_to_new'].items()}
+        self.is_train = is_train
+        # Include negatives in both train and eval to properly measure false positives
+        self.negative_ratio = negative_ratio
         
         # Load base dataset
         self.base_dataset = CharadesAGDataset(
@@ -51,22 +61,40 @@ class SmartHomeDataset(Dataset):
         self.num_objects = self.base_dataset.num_objects  # 36
         self.num_relations = self.base_dataset.num_relations  # 26
         
-        # New num_classes: 36 objects + 42 actions + 26 relations = 104
+        # Total classes based on config
         self.num_classes = self.num_objects + self.num_smart_home_actions + self.num_relations
         
-        # Filter keyframes to only those with smart home actions
-        self.filtered_indices = self._filter_keyframes()
+        # Filter keyframes: positives (have smart home actions) + sampled negatives
+        self.positive_indices, self.negative_indices = self._filter_keyframes()
         
-        print(f"SmartHomeDataset: {len(self.filtered_indices)}/{len(self.base_dataset)} "
-              f"keyframes ({100*len(self.filtered_indices)/len(self.base_dataset):.1f}%)")
-        print(f"  Actions: {self.num_smart_home_actions} (was 157)")
+        # Sample negatives: ~negative_ratio of positive count
+        num_negatives = int(len(self.positive_indices) * self.negative_ratio)
+        if num_negatives > 0 and len(self.negative_indices) > 0:
+            sampled_negatives = random.sample(
+                self.negative_indices, 
+                min(num_negatives, len(self.negative_indices))
+            )
+        else:
+            sampled_negatives = []
+        
+        # Combined indices: all positives + sampled negatives
+        self.filtered_indices = self.positive_indices + sampled_negatives
+        # Track which are negatives (for __getitem__ to zero out actions)
+        self.negative_set = set(sampled_negatives)
+        
+        print(f"SmartHomeDataset ({'train' if is_train else 'val'}):")
+        print(f"  Positive frames: {len(self.positive_indices)}")
+        print(f"  Negative frames: {len(sampled_negatives)} ({100*len(sampled_negatives)/max(1,len(self.positive_indices)):.1f}% of positives)")
+        print(f"  Total frames: {len(self.filtered_indices)}")
+        print(f"  Actions: {self.num_smart_home_actions}")
         print(f"  Objects: {self.num_objects}")
         print(f"  Relations: {self.num_relations}")
         print(f"  Total classes: {self.num_classes}")
     
     def _filter_keyframes(self):
-        """Find indices of keyframes that have at least one smart home action."""
-        filtered = []
+        """Separate keyframes into positives (have smart home actions) and negatives (no smart home actions)."""
+        positives = []
+        negatives = []
         
         for idx in range(len(self.base_dataset)):
             keyframe_id = self.base_dataset.keyframes[idx]
@@ -86,9 +114,11 @@ class SmartHomeDataset(Dataset):
                     break
             
             if has_smart_home:
-                filtered.append(idx)
+                positives.append(idx)
+            else:
+                negatives.append(idx)
         
-        return filtered
+        return positives, negatives
     
     def __len__(self):
         return len(self.filtered_indices)
@@ -96,9 +126,10 @@ class SmartHomeDataset(Dataset):
     def __getitem__(self, idx):
         # Get base dataset item
         base_idx = self.filtered_indices[idx]
+        is_negative = base_idx in self.negative_set
         info, video_clip, target = self.base_dataset[base_idx]
         
-        # Remap labels from 219 (36+157+26) to 104 (36+42+26)
+        # Remap labels from 219 (36+157+26) to num_classes
         if target['labels'].shape[0] > 0:
             old_labels = target['labels']  # [N, 219]
             new_labels = torch.zeros(old_labels.shape[0], self.num_classes, 
@@ -107,18 +138,20 @@ class SmartHomeDataset(Dataset):
             # Copy objects (0:36) -> (0:36) - unchanged
             new_labels[:, :self.num_objects] = old_labels[:, :self.num_objects]
             
-            # Remap actions (36:193) -> (36:num_smart_home_actions)
-            # For merged actions (multiple old indices -> same new index),
-            # use logical OR so ANY source action being active makes the merged action active
-            for old_idx, new_idx in self.old_to_new.items():
-                old_pos = self.num_objects + old_idx
-                new_pos = self.num_objects + new_idx
-                # Use maximum to OR the values (handles merged actions correctly)
-                new_labels[:, new_pos] = torch.maximum(new_labels[:, new_pos], old_labels[:, old_pos])
+            if not is_negative:
+                # Remap actions (36:193) -> (36:num_smart_home_actions)
+                # For merged actions (multiple old indices -> same new index),
+                # use logical OR so ANY source action being active makes the merged action active
+                for old_idx, new_idx in self.old_to_new.items():
+                    old_pos = self.num_objects + old_idx
+                    new_pos = self.num_objects + new_idx
+                    # Use maximum to OR the values (handles merged actions correctly)
+                    new_labels[:, new_pos] = torch.maximum(new_labels[:, new_pos], old_labels[:, old_pos])
+            # else: actions stay all zeros for negative frames
             
-            # Copy relations (193:219) -> (78:104) - unchanged but shifted
+            # Copy relations (193:219) -> shifted position - unchanged but shifted
             old_rel_start = self.num_objects + 157  # 36 + 157 = 193
-            new_rel_start = self.num_objects + self.num_smart_home_actions  # 36 + 42 = 78
+            new_rel_start = self.num_objects + self.num_smart_home_actions
             new_labels[:, new_rel_start:] = old_labels[:, old_rel_start:]
             
             target['labels'] = new_labels

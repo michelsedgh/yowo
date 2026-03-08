@@ -341,8 +341,10 @@ def train():
 
             # Cross-attention monitoring disabled (noisy, not useful for training progress)
 
-            # Optimize
-            if ni % accumulate == 0:
+            # Optimize (step after accumulate batches, or at end of epoch)
+            is_accumulate_step = (iter_i + 1) % accumulate == 0
+            is_last_iter = (iter_i + 1) == epoch_size
+            if is_accumulate_step or is_last_iter:
                 if scaler is not None:
                     scaler.unscale_(optimizer)
                     # Gradient clipping - REQUIRED to prevent NaN with AMP
@@ -469,6 +471,7 @@ def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, batch_time, a
         log += f'[lr: {lr[0]:.6f}]'
     
     # Key losses only (clean format)
+    loss_conf = loss_dict.get('loss_conf', 0)
     loss_act = loss_dict.get('loss_act', 0)
     loss_obj = loss_dict.get('loss_obj', 0)
     loss_rel = loss_dict.get('loss_rel', 0)
@@ -476,13 +479,14 @@ def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, batch_time, a
     total_loss = loss_dict.get('losses', 0) * accumulate
     
     # Convert tensors to floats
+    if hasattr(loss_conf, 'item'): loss_conf = loss_conf.item()
     if hasattr(loss_act, 'item'): loss_act = loss_act.item()
     if hasattr(loss_obj, 'item'): loss_obj = loss_obj.item()
     if hasattr(loss_rel, 'item'): loss_rel = loss_rel.item()
     if hasattr(loss_box, 'item'): loss_box = loss_box.item()
     if hasattr(total_loss, 'item'): total_loss = total_loss.item()
     
-    log += f'[act:{loss_act:.2f}][obj:{loss_obj:.2f}][rel:{loss_rel:.2f}][box:{loss_box:.2f}][total:{total_loss:.2f}]'
+    log += f'[conf:{loss_conf:.2f}][act:{loss_act:.2f}][obj:{loss_obj:.2f}][rel:{loss_rel:.2f}][box:{loss_box:.2f}][total:{total_loss:.2f}]'
     
     # Time per batch
     log += f'[{batch_time:.1f}s]'
