@@ -29,7 +29,7 @@ from models.yowo.yowo_multitask import YOWOMultiTask
 # ONNX WRAPPER
 # =========================================================================
 class YOWONMSFreeONNXWrapper(nn.Module):
-    def __init__(self, model: YOWOMultiTask, img_size: int = 224, backbone_3d_type: str = 'resnext'):
+    def __init__(self, model: YOWOMultiTask, img_size: int = 224, backbone_3d_type: str = 'resnext', backbone_3d_size: int = None, use_motion_enhanced: bool = False):
         super().__init__()
         self.model = model
         self.img_size = img_size
@@ -38,6 +38,10 @@ class YOWONMSFreeONNXWrapper(nn.Module):
         self.num_actions = model.num_actions
         self.num_relations = model.num_relations
         self.backbone_3d_type = backbone_3d_type
+        # Store 3D backbone resolution (e.g., 224 when input is 480)
+        self.backbone_3d_size = backbone_3d_size or getattr(model, 'backbone_3d_size', None)
+        # Motion enhanced mode: 3ch input → 6ch after motion module
+        self.use_motion_enhanced = use_motion_enhanced or getattr(model, 'motion_module', None) is not None
         
         # Norm checks
         if 'x3d' in backbone_3d_type.lower():
@@ -75,12 +79,29 @@ class YOWONMSFreeONNXWrapper(nn.Module):
         else:
             video_clips_3d = video_clips
         
+        # CRITICAL: Apply motion module if enabled (converts 3ch → 6ch)
+        if self.use_motion_enhanced and hasattr(self.model, 'motion_module') and self.model.motion_module is not None:
+            video_clips_3d = self.model.motion_module(video_clips_3d)
+        
+        # CRITICAL: Resize video clips for 3D backbone if using different resolution
+        # e.g., input is 480px but ResNeXt-3D expects 224px
+        if self.backbone_3d_size and video_clips_3d.shape[-1] != self.backbone_3d_size:
+            B, C, T, H, W = video_clips_3d.shape
+            # Reshape [B, C, T, H, W] -> [B*T, C, H, W] for spatial resize
+            video_clips_3d = video_clips_3d.permute(0, 2, 1, 3, 4).reshape(B * T, C, H, W)
+            video_clips_3d = F.interpolate(video_clips_3d, size=(self.backbone_3d_size, self.backbone_3d_size), mode='bilinear', align_corners=False)
+            # Reshape back [B*T, C, H', W'] -> [B, C, T, H', W']
+            video_clips_3d = video_clips_3d.reshape(B, T, C, self.backbone_3d_size, self.backbone_3d_size).permute(0, 2, 1, 3, 4)
+        
         feat_3d = self.model.backbone_3d(video_clips_3d)
         cls_feats, reg_feats = self.model.backbone_2d(key_frame)
         all_outputs = []
         
         for level, (cls_feat, reg_feat) in enumerate(zip(cls_feats, reg_feats)):
-            feat_3d_up = F.interpolate(feat_3d, scale_factor=2 ** (2 - level))
+            # CRITICAL FIX: Interpolate 3D features to match 2D feature spatial size
+            # This handles cases where 3D backbone uses different resolution (e.g., 224x224)
+            target_size = cls_feat.shape[-2:]  # (H, W) of 2D features
+            feat_3d_up = F.interpolate(feat_3d, size=target_size, mode='bilinear', align_corners=False)
             cls_feat = self.model.cls_channel_encoders[level](cls_feat, feat_3d_up)
             reg_feat = self.model.reg_channel_encoders[level](reg_feat, feat_3d_up)
             cls_feat, reg_feat = self.model.heads[level](cls_feat, reg_feat)
@@ -159,8 +180,17 @@ def stage1_purge_ckpt(ckpt_path):
 # =========================================================================
 # STAGE 2: GENERATE ONNX
 # =========================================================================
-def stage2_export_onnx(purged_path, state_dict, version, dataset, len_clip=32, img_size=224):
+def stage2_export_onnx(purged_path, state_dict, version, dataset, len_clip=32, img_size=480):
     print(f"\n{'='*60}\nSTAGE 2: ONNX GENERATION\n{'='*60}")
+    
+    # Auto-detect head_dim from checkpoint weights
+    head_dim = 256  # default
+    for key in state_dict.keys():
+        if 'cls_channel_encoders.0.fuse_convs.0.convs.0.weight' in key:
+            # Shape is [head_dim, in_channels, 1, 1]
+            head_dim = state_dict[key].shape[0]
+            print(f"  Auto-detected head_dim={head_dim} from checkpoint")
+            break
     
     class Args:
         def __init__(self):
@@ -175,6 +205,10 @@ def stage2_export_onnx(purged_path, state_dict, version, dataset, len_clip=32, i
     d_cfg = build_dataset_config(model_args)
     m_cfg = build_model_config(model_args)
     
+    # Override head_dim with detected value
+    m_cfg['head_dim'] = head_dim
+    print(f"  Using head_dim={head_dim} for model construction")
+    
     # Model built purely as evaluation/O2O single state
     model = YOWOMultiTask(
         cfg=m_cfg, device='cpu', 
@@ -186,9 +220,14 @@ def stage2_export_onnx(purged_path, state_dict, version, dataset, len_clip=32, i
     model.eval()
     
     backbone_type = m_cfg.get('backbone_3d', 'resnext101')
-    onnx_wrapper = YOWONMSFreeONNXWrapper(model, img_size, backbone_type)
+    backbone_3d_size = m_cfg.get('backbone_3d_size', None)
+    use_motion_enhanced = m_cfg.get('use_motion_enhanced', False)
+    print(f"  Using backbone_3d_size={backbone_3d_size} (None means same as input)")
+    print(f"  Motion enhanced mode: {use_motion_enhanced}")
+    onnx_wrapper = YOWONMSFreeONNXWrapper(model, img_size, backbone_type, backbone_3d_size, use_motion_enhanced)
     onnx_wrapper.eval()
     
+    # Input is always 3 channels (RGB) - motion module converts to 6ch internally
     dummy_input = torch.randn(1, 3, len_clip, img_size, img_size)
     out_path = purged_path.replace('_purged.pth', '_optimized.onnx')
     
@@ -211,8 +250,9 @@ def stage2_export_onnx(purged_path, state_dict, version, dataset, len_clip=32, i
 # =========================================================================
 # STAGE 3: TENSORRT CALIBRATION AND ENGINE BUILDING
 # =========================================================================
-def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32):
+def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32, img_size=480):
     print(f"\n{'='*60}\nSTAGE 3: TENSORRT INT8 COMPILATION\n{'='*60}")
+    print(f"  Calibration input size: {img_size}x{img_size}")
     
     import tensorrt as trt
     import pycuda.driver as cuda
@@ -222,13 +262,14 @@ def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32):
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING) # Mute excess logs
     
     class YOWOCalibrator(trt.IInt8EntropyCalibrator2):
-        def __init__(self, data_dir, len_clip=32):
+        def __init__(self, data_dir, len_clip=32, img_size=480):
             trt.IInt8EntropyCalibrator2.__init__(self)
             self.cache_file = onnx_path.replace('.onnx', '.cache')
             self.len_clip = len_clip
-            self.video_dirs = sorted(glob.glob(os.path.join(data_dir, "*")))[:25] # 25 videos is enough
+            self.img_size = img_size
+            self.video_dirs = sorted(glob.glob(os.path.join(data_dir, "*")))[:10]  # 10 videos for calibration
             self.current_idx = 0
-            self.device_input = cuda.mem_alloc(int(np.prod((1, 3, len_clip, 224, 224)) * 4))
+            self.device_input = cuda.mem_alloc(int(np.prod((1, 3, len_clip, img_size, img_size)) * 4))
             
         def get_batch_size(self): return 1
         
@@ -248,8 +289,8 @@ def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32):
             for idx in indices:
                 img = cv2.imread(frames[idx])
                 if img is None:
-                    img = np.zeros((224,224,3), dtype=np.uint8)
-                img = cv2.resize(img, (224, 224))
+                    img = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
+                img = cv2.resize(img, (self.img_size, self.img_size))
                 clip.append((cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0))
             
             clip = np.ascontiguousarray(np.expand_dims(np.stack(clip, axis=0).transpose(3, 0, 1, 2), 0))
@@ -275,7 +316,8 @@ def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32):
     config = builder.create_builder_config()
     config.set_flag(trt.BuilderFlag.INT8)
     config.set_flag(trt.BuilderFlag.FP16)
-    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 * 1024**3)
+    # Workspace for TensorRT optimization (temporary scratch space, doesn't affect model quality)
+    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 * 1024**3)  # 2GB workspace
     
     # !!! CRITICAL PRECISION FIX for OBJECT DETECTION !!!
     # Force box regression, context modules, and activation layers to FP16.
@@ -289,33 +331,67 @@ def stage3_build_engine(onnx_path, calib_data_dir, len_clip=32):
         "act_preds",      # Action prediction head
         "rel_preds",      # Relation prediction head
         "obj_preds",      # Object prediction head
-        "softmax", "sigmoid", "exp",
+        "softmax", "sigmoid",
         "matmul", "attention", "norm"  # Attention ops need precision
     ]
-    # Skip these layer types that can't have precision changed
-    skip_layer_types = {trt.LayerType.SHAPE, trt.LayerType.CONSTANT, trt.LayerType.IDENTITY}
+    # Keywords that indicate index-computing layers - CANNOT use FP16
+    skip_keywords = [
+        "expand", "gather", "scatter", "slice", "concat",
+        "reshape", "transpose", "squeeze", "unsqueeze",
+        "shape", "cast", "floor", "ceil", "round",
+        "nonzero", "where", "topk", "argmax", "argmin",
+        "motion_module", "motion_diff"  # Motion module has index ops
+    ]
+    # Layer types that can't have precision changed
+    skip_layer_types = {
+        trt.LayerType.SHAPE, 
+        trt.LayerType.CONSTANT, 
+        trt.LayerType.IDENTITY,
+        trt.LayerType.SHUFFLE,      # Reshape/transpose
+        trt.LayerType.CONCATENATION,
+        trt.LayerType.GATHER,
+        trt.LayerType.SLICE,
+        trt.LayerType.RESIZE,       # Interpolation uses indices
+    }
+    # Also skip if layer type exists (TRT version compatibility)
+    for lt_name in ['SCATTER', 'CAST', 'FILL', 'NON_ZERO']:
+        if hasattr(trt.LayerType, lt_name):
+            skip_layer_types.add(getattr(trt.LayerType, lt_name))
+    
     fp16_count = 0
+    skipped_count = 0
     for i in range(network.num_layers):
         layer = network.get_layer(i)
+        layer_name_lower = layer.name.lower()
+        
         # Skip layers that don't support precision changes
         if layer.type in skip_layer_types:
+            skipped_count += 1
             continue
-        if any(key in layer.name.lower() for key in fp16_keywords):
+        # Skip index-computing layers by name
+        if any(skip_key in layer_name_lower for skip_key in skip_keywords):
+            skipped_count += 1
+            continue
+            
+        # Only set FP16 for critical layers
+        if any(key in layer_name_lower for key in fp16_keywords):
             try:
                 layer.precision = trt.float16
                 layer.set_output_type(0, trt.float16)
                 fp16_count += 1
             except Exception:
-                pass  # Skip layers that don't support precision changes
-    print(f"    → {fp16_count} layers set to FP16 precision")
+                skipped_count += 1
+    print(f"    → {fp16_count} layers set to FP16 precision, {skipped_count} skipped (index ops)")
 
-    if hasattr(trt.BuilderFlag, 'OBEY_PRECISION_CONSTRAINTS'):
+    # Use PREFER_PRECISION_CONSTRAINTS instead of OBEY for more flexibility
+    if hasattr(trt.BuilderFlag, 'PREFER_PRECISION_CONSTRAINTS'):
+        config.set_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
+    elif hasattr(trt.BuilderFlag, 'OBEY_PRECISION_CONSTRAINTS'):
         config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
-    else:
-        config.set_flag(trt.BuilderFlag.STRICT_TYPES)
     
     print(f"  Beginning INT8 Quantization Process...")
-    config.int8_calibrator = YOWOCalibrator(calib_data_dir, len_clip)
+    calibrator = YOWOCalibrator(calib_data_dir, len_clip, img_size)
+    config.int8_calibrator = calibrator
     
     # Engine creation
     engine_path = onnx_path.replace('_optimized.onnx', '_int8.engine')
@@ -340,6 +416,7 @@ def main():
     parser.add_argument('--dataset', type=str, default='smart_home', choices=['smart_home', 'charades_ag'])
     parser.add_argument('--len_clip', type=int, default=32)
     parser.add_argument('--calib_data', type=str, default='/home/michel/yowo/data/ActionGenome/frames')
+    parser.add_argument('--img_size', type=int, default=None, help='Input resolution (auto-detected if not set)')
     args = parser.parse_args()
 
     if not os.path.exists(args.checkpoint):
@@ -350,11 +427,28 @@ def main():
     ckpt_name = os.path.basename(args.checkpoint)
     idx = ckpt_name.find('_epoch')
     version = ckpt_name[:idx] if idx != -1 else 'yowo_v2_resnext_yolo26m_multitask'
+    
+    # Resolution: Use CLI arg if provided, otherwise check checkpoint name, default to 480
+    if args.img_size:
+        img_size = args.img_size
+    elif '224' in ckpt_name:
+        img_size = 224
+    elif '480' in ckpt_name:
+        img_size = 480
+    elif '640' in ckpt_name:
+        img_size = 640
+    else:
+        img_size = 480  # Default - safer to use higher resolution
+    print(f"\nAuto-detected configuration:")
+    print(f"  Version: {version}")
+    print(f"  Resolution: {img_size}px")
+    print(f"  Len_clip: {args.len_clip}")
+    print(f"  Dataset: {args.dataset}")
 
     # Run the unified build chain!
     purged_path, state_dict = stage1_purge_ckpt(args.checkpoint)
-    onnx_path = stage2_export_onnx(purged_path, state_dict, version, args.dataset, args.len_clip)
-    engine_path = stage3_build_engine(onnx_path, args.calib_data, args.len_clip)
+    onnx_path = stage2_export_onnx(purged_path, state_dict, version, args.dataset, args.len_clip, img_size)
+    engine_path = stage3_build_engine(onnx_path, args.calib_data, args.len_clip, img_size)
 
     # Cleanup intermediate 
     if os.path.exists(purged_path):

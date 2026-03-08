@@ -334,6 +334,266 @@
             color: var(--red);
         }
 
+        /* GT Analysis styles */
+        .gt-explanation {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .gt-explanation h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .gt-explanation p {
+            font-size: 12px;
+            color: var(--muted);
+            margin: 4px 0;
+        }
+
+        .gt-explanation strong {
+            color: var(--text);
+        }
+
+        .gt-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .gt-metric-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .gt-metric-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .gt-metric-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .gt-metric-trend {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .gap-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            height: 24px;
+        }
+
+        .gap-bar-predt {
+            background: var(--green);
+            height: 100%;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: #000;
+            min-width: 40px;
+        }
+
+        .gap-bar-predf {
+            background: var(--red);
+            height: 100%;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: #fff;
+            min-width: 40px;
+        }
+
+        .gap-bar-gap {
+            background: var(--blue);
+            height: 100%;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: #000;
+            min-width: 50px;
+        }
+
+        .gap-label {
+            font-size: 9px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        .learning-status {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-top: 8px;
+            display: inline-block;
+        }
+
+        .learning-yes {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--green);
+        }
+
+        .learning-slow {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--orange);
+        }
+
+        .learning-no {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--red);
+        }
+
+        .learning-dead {
+            background: rgba(248, 81, 73, 0.4);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+
+        .gt-trend-chart {
+            display: flex;
+            gap: 2px;
+            margin: 8px 0;
+            height: 50px;
+            align-items: flex-end;
+        }
+
+        .gt-trend-bar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .gt-trend-bar .bar-stack {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            height: 40px;
+            justify-content: flex-end;
+        }
+
+        .gt-trend-bar .predt-bar {
+            background: var(--green);
+            width: 100%;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .gt-trend-bar .predf-bar {
+            background: var(--red);
+            width: 100%;
+            opacity: 0.7;
+        }
+
+        .gt-trend-bar .epoch-label {
+            font-size: 8px;
+            color: var(--muted);
+        }
+
+        .gt-trend-legend {
+            display: flex;
+            gap: 12px;
+            font-size: 9px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        .gt-trend-legend span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .gt-trend-legend .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+        }
+
+        .dead-actions-section, .improving-section {
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        .dead-actions-section {
+            background: rgba(248, 81, 73, 0.1);
+            border: 1px solid var(--red);
+        }
+        .improving-section {
+            background: rgba(63, 185, 80, 0.1);
+            border: 1px solid var(--green);
+        }
+
+        .dead-actions-section h4, .improving-section h4 {
+            font-size: 12px;
+            margin: 0 0 8px 0;
+        }
+        .dead-actions-section h4 {
+            color: var(--red);
+        }
+        .improving-section h4 {
+            color: var(--green);
+        }
+        .dead-actions-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .dead-action-tag {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--red);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .change-indicator {
+            font-size: 9px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-left: 6px;
+        }
+
+        .change-up {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--green);
+        }
+
+        .change-down {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--red);
+        }
+
+        .change-flat {
+            background: rgba(139, 148, 158, 0.2);
+            color: var(--muted);
+        }
+
         .bg-great {
             background: var(--green);
         }
@@ -361,15 +621,18 @@
             <div class="btn-row">
                 <button class="btn btn-green" onclick="importData()">📥 Import</button>
                 <button class="btn btn-red" onclick="clearAll()">🗑️ Clear</button>
+                <button class="btn" style="background:var(--purple);color:#fff" onclick="exportForAI()">📋 Export for AI</button>
                 <span id="status"></span>
             </div>
         </div>
 
         <div class="summary-row" id="summary"></div>
+        <div id="health-status"></div>
 
         <div class="tabs">
             <div class="tab active" data-tab="overview">📊 Overview</div>
-            <div class="tab" data-tab="actions">🎬 Actions (42)</div>
+            <div class="tab" data-tab="gt-analysis">🎯 GT Analysis</div>
+            <div class="tab" data-tab="actions">🎬 Actions (35)</div>
             <div class="tab" data-tab="relations">🔗 Relations (26)</div>
             <div class="tab" data-tab="objects">📦 Objects (36)</div>
         </div>
@@ -378,14 +641,42 @@
             <div class="card-grid" id="overview-grid"></div>
         </div>
 
+        <div class="panel" id="gt-analysis-panel">
+            <div class="gt-explanation">
+                <h3>📖 Understanding GT Analysis</h3>
+                <p><strong>PredT</strong> = Mean prediction when action IS happening (want HIGH, ideally >0.7)</p>
+                <p><strong>PredF</strong> = Mean prediction when action is NOT happening (want LOW, ideally <0.2)</p>
+                <p><strong>Gap</strong> = PredT - PredF (discrimination ability, want HIGH >0.3)</p>
+                <p><strong>📈 Charts show epoch-by-epoch progress</strong> - green bars are PredT, red bars are PredF. Gap should widen over time.</p>
+            </div>
+            <div id="dead-actions-container"></div>
+            <div id="improving-actions-container"></div>
+            <div class="gt-summary" id="gt-summary"></div>
+            <div class="search-row">
+                <input type="text" id="gt-search" placeholder="🔍 Search actions...">
+                <select id="gt-sort">
+                    <option value="gap-desc">Best Gap (Learning)</option>
+                    <option value="gap-asc">Worst Gap (Struggling)</option>
+                    <option value="change-desc">📈 Most Improved (vs prev)</option>
+                    <option value="change-asc">📉 Most Declined (vs prev)</option>
+                    <option value="predt-desc">Highest PredT</option>
+                    <option value="predf-asc">Lowest PredF</option>
+                    <option value="name">Alphabetical</option>
+                </select>
+            </div>
+            <div class="card-grid" id="gt-grid"></div>
+        </div>
+
         <div class="panel" id="actions-panel">
+            <div id="actions-categories"></div>
             <div class="search-row">
                 <input type="text" id="action-search" placeholder="🔍 Search...">
                 <select id="action-sort">
                     <option value="f1-desc">Best F1</option>
                     <option value="f1-asc">Worst F1</option>
-                    <option value="change-desc">Most Improved</option>
-                    <option value="change-asc">Most Declined</option>
+                    <option value="change-desc">📈 Most Improved (vs prev)</option>
+                    <option value="change-asc">📉 Most Declined (vs prev)</option>
+                    <option value="gap-desc">Best Gap</option>
                     <option value="name">Alphabetical</option>
                 </select>
             </div>
@@ -393,12 +684,15 @@
         </div>
 
         <div class="panel" id="relations-panel">
+            <div id="relations-categories"></div>
             <div class="search-row">
                 <input type="text" id="relation-search" placeholder="🔍 Search...">
                 <select id="relation-sort">
                     <option value="f1-desc">Best F1</option>
                     <option value="f1-asc">Worst F1</option>
-                    <option value="change-desc">Most Improved</option>
+                    <option value="change-desc">📈 Most Improved (vs prev)</option>
+                    <option value="change-asc">📉 Most Declined (vs prev)</option>
+                    <option value="gap-desc">Best Gap</option>
                     <option value="name">Alphabetical</option>
                 </select>
             </div>
@@ -406,11 +700,14 @@
         </div>
 
         <div class="panel" id="objects-panel">
+            <div id="objects-categories"></div>
             <div class="search-row">
                 <input type="text" id="object-search" placeholder="🔍 Search...">
                 <select id="object-sort">
                     <option value="acc-desc">Best Accuracy</option>
                     <option value="acc-asc">Worst Accuracy</option>
+                    <option value="change-desc">📈 Most Improved (vs prev)</option>
+                    <option value="change-asc">📉 Most Declined (vs prev)</option>
                     <option value="name">Alphabetical</option>
                 </select>
             </div>
@@ -438,19 +735,47 @@
                 ['actionTop1', /Action Top-1:\s*([\d.]+)%/], ['relationF1', /Relation F1:\s*([\d.]+)%/]
                 ].forEach(([k, p]) => { const m = block.match(p); if (m) ep.summary[k] = parseFloat(m[1]); });
 
-                // Actions
+                // Actions with PredT/PredF
                 const at = block.match(/PER-ACTION BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
                 if (at) for (const row of at[1].trim().split('\n')) {
                     const m = row.match(/^\s*(.+?)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)%\s+(\d+)%\s+(\d+)%/);
-                    if (m) ep.actions.push({ name: m[1].trim(), gt: +m[2], p: +m[5], r: +m[6], f1: +m[7] });
+                    if (m) ep.actions.push({ 
+                        name: m[1].trim(), 
+                        gt: +m[2], 
+                        predT: parseFloat(m[3]), 
+                        predF: parseFloat(m[4]), 
+                        p: +m[5], 
+                        r: +m[6], 
+                        f1: +m[7] 
+                    });
                 }
 
-                // Relations
+                // Extract overall GT=True mean for actions
+                const gtTrueMatch = block.match(/ACTION RECOGNITION[\s\S]*?When GT=True:\s*mean=([\d.]+)/);
+                if (gtTrueMatch) ep.summary.actionGtTrue = parseFloat(gtTrueMatch[1]);
+                const gtFalseMatch = block.match(/ACTION RECOGNITION[\s\S]*?When GT=False:\s*mean=([\d.]+)/);
+                if (gtFalseMatch) ep.summary.actionGtFalse = parseFloat(gtFalseMatch[1]);
+
+                // Relations with PredT/PredF
                 const rt = block.match(/PER-RELATION BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
                 if (rt) for (const row of rt[1].trim().split('\n')) {
                     const m = row.match(/^\s*(\w+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)%\s+(\d+)%\s+(\d+)%/);
-                    if (m) ep.relations.push({ name: m[1], gt: +m[2], p: +m[5], r: +m[6], f1: +m[7] });
+                    if (m) ep.relations.push({ 
+                        name: m[1], 
+                        gt: +m[2], 
+                        predT: parseFloat(m[3]), 
+                        predF: parseFloat(m[4]), 
+                        p: +m[5], 
+                        r: +m[6], 
+                        f1: +m[7] 
+                    });
                 }
+
+                // Extract overall GT=True mean for relations
+                const relGtTrueMatch = block.match(/RELATIONS[\s\S]*?When GT=True:\s*mean=([\d.]+)/);
+                if (relGtTrueMatch) ep.summary.relationGtTrue = parseFloat(relGtTrueMatch[1]);
+                const relGtFalseMatch = block.match(/RELATIONS[\s\S]*?When GT=False:\s*mean=([\d.]+)/);
+                if (relGtFalseMatch) ep.summary.relationGtFalse = parseFloat(relGtFalseMatch[1]);
 
                 // Objects
                 const ot = block.match(/PER-OBJECT BREAKDOWN[\s\S]*?-{20,}([\s\S]*?)-{20,}/);
@@ -515,18 +840,42 @@
             const history = getHistory(name, type);
             const latest = getLatest(name, type);
             const current = history.filter(v => v !== null).slice(-1)[0] || 0;
-            const change = calcChange(history);
-            const trendClass = change > 0 ? 'up' : change < 0 ? 'down' : 'same';
-            const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+            const changeFromFirst = calcChange(history);
+            
+            // Calculate change from previous epoch
+            const validHistory = history.filter(v => v !== null);
+            const prevVal = validHistory.length > 1 ? validHistory[validHistory.length - 2] : current;
+            const changeFromPrev = current - prevVal;
+            
+            const trendClass = changeFromPrev > 0 ? 'up' : changeFromPrev < 0 ? 'down' : 'same';
+            const arrow = changeFromPrev > 0 ? '↑' : changeFromPrev < 0 ? '↓' : '→';
 
             let stats = '';
+            let statusBadge = '';
+            
             if (latest && type !== 'object') {
+                const gap = latest.predT !== undefined ? (latest.predT - latest.predF) : 0;
+                const gapStr = gap.toFixed(2);
+                // Determine status
+                const dead = latest.f1 === 0 && latest.gt > 50;
+                const learning = gap >= 0.2 || current >= 50;
+                const slow = gap >= 0.05 && gap < 0.2 && current < 50 && current > 0;
+                statusBadge = dead ? '<span class="learning-status learning-no">✗ Dead</span>' : 
+                              learning ? '<span class="learning-status learning-yes">✓ Learning</span>' : 
+                              slow ? '<span class="learning-status learning-slow">~ Slow</span>' : 
+                              '<span class="learning-status learning-no">✗ Struggling</span>';
+                
                 stats = `<div class="stats-row">
-            <div class="stat"><div class="stat-label">Precision</div><div class="stat-value">${latest.p}%</div></div>
-            <div class="stat"><div class="stat-label">Recall</div><div class="stat-value">${latest.r}%</div></div>
+            <div class="stat"><div class="stat-label">P / R</div><div class="stat-value">${latest.p}% / ${latest.r}%</div></div>
+            <div class="stat"><div class="stat-label">Gap</div><div class="stat-value c-${gapColorClass(gap)}">${gapStr}</div></div>
             <div class="stat"><div class="stat-label">Samples</div><div class="stat-value">${latest.gt}</div></div>
         </div>`;
             } else if (latest && type === 'object') {
+                const learning = current >= 80;
+                const slow = current >= 50 && current < 80;
+                statusBadge = learning ? '<span class="learning-status learning-yes">✓ Good</span>' : 
+                              slow ? '<span class="learning-status learning-slow">~ OK</span>' : 
+                              '<span class="learning-status learning-no">✗ Low</span>';
                 stats = `<div class="stats-row">
             <div class="stat"><div class="stat-label">GT</div><div class="stat-value">${latest.gt}</div></div>
             <div class="stat"><div class="stat-label">Correct</div><div class="stat-value">${latest.correct}</div></div>
@@ -534,15 +883,19 @@
         </div>`;
             }
 
-            return `<div class="item-card" data-name="${name.toLowerCase()}" data-current="${current}" data-change="${change}">
+            return `<div class="item-card" data-name="${name.toLowerCase()}" data-current="${current}" data-change="${changeFromPrev}" data-changefirst="${changeFromFirst}">
         <div class="item-header">
             <div class="item-name">${name}</div>
-            <div>
+            <div style="text-align:right">
                 <div class="item-current c-${colorClass(current)}">${current.toFixed(0)}%</div>
-                <div class="item-trend ${trendClass}">${arrow} ${Math.abs(change).toFixed(0)}%</div>
+                <div class="item-trend ${trendClass}">${arrow} ${Math.abs(changeFromPrev).toFixed(0)}% vs prev</div>
             </div>
         </div>
         ${miniChart(history)}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+            ${statusBadge}
+            <span style="font-size:9px;color:var(--muted)">From E1: ${changeFromFirst >= 0 ? '+' : ''}${changeFromFirst.toFixed(0)}%</span>
+        </div>
         ${stats}
     </div>`;
         }
@@ -573,27 +926,450 @@
         function render() {
             renderSummary();
             renderOverview();
+            renderGtAnalysis();
             renderItems('action');
             renderItems('relation');
             renderItems('object');
         }
 
+        function gapColorClass(gap) {
+            return gap >= 0.3 ? 'great' : gap >= 0.15 ? 'good' : gap >= 0.05 ? 'ok' : 'bad';
+        }
+
+        function learningStatus(gap) {
+            if (gap >= 0.2) return '<span class="learning-status learning-yes">✓ Learning</span>';
+            if (gap >= 0.05) return '<span class="learning-status learning-slow">~ Slow</span>';
+            return '<span class="learning-status learning-no">✗ Not Learning</span>';
+        }
+
+        // ========== GT ANALYSIS - CLEAN REWRITE ==========
+        
+        function gtSummaryCard(key, label, color, wantHigh = true) {
+            const history = epochs.map(e => e.summary[key] || 0);
+            const current = history[history.length - 1] || 0;
+            const prev = history.length > 1 ? history[history.length - 2] : current;
+            const first = history[0] || 0;
+            const changePrev = current - prev;
+            const changeFirst = current - first;
+            const isGood = wantHigh ? changePrev >= 0 : changePrev <= 0;
+            
+            return `<div class="item-card">
+                <div class="item-header">
+                    <div class="item-name">${label}</div>
+                    <div style="text-align:right">
+                        <div class="item-current" style="color:${color}">${current.toFixed(4)}</div>
+                        <div class="item-trend ${isGood ? 'up' : 'down'}">
+                            ${changePrev >= 0 ? '+' : ''}${changePrev.toFixed(4)} vs E${epochs[epochs.length-2]?.epoch || '?'}
+                        </div>
+                    </div>
+                </div>
+                <div class="mini-chart">${history.map((v, i) => {
+                    const h = Math.max(4, v * 60);
+                    const c = wantHigh ? (v >= 0.5 ? 'var(--green)' : v >= 0.3 ? 'var(--cyan)' : 'var(--orange)') 
+                                       : (v < 0.25 ? 'var(--green)' : v < 0.35 ? 'var(--orange)' : 'var(--red)');
+                    return `<div class="bar-group">
+                        <div class="bar-value" style="color:${c}">${v.toFixed(2)}</div>
+                        <div class="bar" style="height:${h}px;background:${c}"></div>
+                        <div class="bar-label">E${epochs[i].epoch}</div>
+                    </div>`;
+                }).join('')}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:4px">
+                    Total from E${epochs[0].epoch}: ${changeFirst >= 0 ? '+' : ''}${changeFirst.toFixed(4)}
+                </div>
+            </div>`;
+        }
+
+        function renderGtAnalysis() {
+            const summaryEl = document.getElementById('gt-summary');
+            const gridEl = document.getElementById('gt-grid');
+            
+            if (!epochs.length) {
+                summaryEl.innerHTML = '';
+                gridEl.innerHTML = '<div class="empty">Import epochs to see GT analysis</div>';
+                return;
+            }
+
+            // Gap history
+            const gapHistory = epochs.map(e => (e.summary.actionGtTrue || 0) - (e.summary.actionGtFalse || 0));
+            const gapCurr = gapHistory[gapHistory.length - 1];
+            const gapPrev = gapHistory.length > 1 ? gapHistory[gapHistory.length - 2] : gapCurr;
+            const gapFirst = gapHistory[0];
+            const gapChangePrev = gapCurr - gapPrev;
+            const gapChangeFirst = gapCurr - gapFirst;
+
+            // Summary cards with per-epoch bars
+            summaryEl.innerHTML = 
+                gtSummaryCard('actionGtTrue', 'Action PredT (want ↑)', 'var(--green)', true) +
+                gtSummaryCard('actionGtFalse', 'Action PredF (want ↓)', 'var(--red)', false) +
+                `<div class="item-card" style="border-color:var(--blue)">
+                    <div class="item-header">
+                        <div class="item-name">Overall Gap (PredT - PredF)</div>
+                        <div style="text-align:right">
+                            <div class="item-current c-${gapColorClass(gapCurr)}">${gapCurr.toFixed(4)}</div>
+                            <div class="item-trend ${gapChangePrev >= 0 ? 'up' : 'down'}">
+                                ${gapChangePrev >= 0 ? '+' : ''}${gapChangePrev.toFixed(4)} vs E${epochs[epochs.length-2]?.epoch || '?'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mini-chart">${gapHistory.map((v, i) => {
+                        const h = Math.max(4, v * 120);
+                        const c = v >= 0.3 ? 'var(--green)' : v >= 0.2 ? 'var(--cyan)' : v >= 0.1 ? 'var(--orange)' : 'var(--red)';
+                        return `<div class="bar-group">
+                            <div class="bar-value" style="color:${c}">${v.toFixed(2)}</div>
+                            <div class="bar" style="height:${h}px;background:${c}"></div>
+                            <div class="bar-label">E${epochs[i].epoch}</div>
+                        </div>`;
+                    }).join('')}</div>
+                    <div style="font-size:9px;color:var(--muted);margin-top:4px">
+                        Total from E${epochs[0].epoch}: ${gapChangeFirst >= 0 ? '+' : ''}${gapChangeFirst.toFixed(4)} | 
+                        ${gapCurr >= 0.25 ? '✓ Good' : gapCurr >= 0.15 ? '~ OK' : '✗ Needs work'}
+                    </div>
+                </div>` +
+                gtSummaryCard('relationGtTrue', 'Relation PredT', 'var(--cyan)', true);
+
+            renderGtItems();
+        }
+
+        function getGtHistory(name) {
+            return epochs.map(e => {
+                const item = e.actions.find(a => a.name === name);
+                return item ? { predT: item.predT, predF: item.predF, gap: item.predT - item.predF, f1: item.f1 } : null;
+            });
+        }
+
+        function gtCard(action, history) {
+            const valid = history.filter(h => h !== null);
+            if (!valid.length) return '';
+            
+            const latest = valid[valid.length - 1];
+            const first = valid[0];
+            const prev = valid.length > 1 ? valid[valid.length - 2] : first;
+            
+            const gapChangePrev = latest.gap - prev.gap;
+            const gapChangeFirst = latest.gap - first.gap;
+            const predTChangePrev = latest.predT - prev.predT;
+            const predFChangePrev = latest.predF - prev.predF;
+            
+            const dead = latest.gap < 0.05 && action.gt > 50 && action.f1 === 0;
+            const trendClass = gapChangePrev > 0.02 ? 'up' : gapChangePrev < -0.02 ? 'down' : 'same';
+            const trendIcon = gapChangePrev > 0.02 ? '📈' : gapChangePrev < -0.02 ? '📉' : '→';
+
+            return `<div class="item-card ${dead ? 'learning-dead' : ''}" data-name="${action.name.toLowerCase()}" data-gap="${latest.gap}" data-gapchange="${gapChangePrev}">
+                <div class="item-header">
+                    <div class="item-name">${action.name}${dead ? ' ⚠️' : ''}</div>
+                    <div style="text-align:right">
+                        <div class="item-current c-${gapColorClass(latest.gap)}">Gap: ${latest.gap.toFixed(2)}</div>
+                        <div class="item-trend ${trendClass}">${trendIcon} ${gapChangePrev >= 0 ? '+' : ''}${gapChangePrev.toFixed(2)} vs prev</div>
+                    </div>
+                </div>
+                
+                <!-- Per-epoch chart like Actions tab -->
+                <div class="mini-chart">${history.map((h, i) => {
+                    if (!h) return `<div class="bar-group"><div class="bar-value">-</div><div class="bar bg-bad" style="height:2px"></div><div class="bar-label">E${epochs[i]?.epoch}</div></div>`;
+                    const gapH = Math.max(4, h.gap * 120);
+                    const c = h.gap >= 0.3 ? 'great' : h.gap >= 0.15 ? 'good' : h.gap >= 0.05 ? 'ok' : 'bad';
+                    return `<div class="bar-group">
+                        <div class="bar-value c-${c}">${h.gap.toFixed(2)}</div>
+                        <div class="bar bg-${c}" style="height:${gapH}px"></div>
+                        <div class="bar-label">E${epochs[i].epoch}</div>
+                    </div>`;
+                }).join('')}</div>
+                
+                <div style="display:flex;gap:12px;margin-top:8px;font-size:10px">
+                    <div style="flex:1">
+                        <div style="color:var(--muted)">PredT</div>
+                        <div style="color:var(--green);font-weight:600">${latest.predT.toFixed(2)} 
+                            <span style="font-size:9px;color:${predTChangePrev >= 0 ? 'var(--green)' : 'var(--red)'}">(${predTChangePrev >= 0 ? '+' : ''}${predTChangePrev.toFixed(2)})</span>
+                        </div>
+                    </div>
+                    <div style="flex:1">
+                        <div style="color:var(--muted)">PredF</div>
+                        <div style="color:var(--red);font-weight:600">${latest.predF.toFixed(2)} 
+                            <span style="font-size:9px;color:${predFChangePrev <= 0 ? 'var(--green)' : 'var(--red)'}">(${predFChangePrev >= 0 ? '+' : ''}${predFChangePrev.toFixed(2)})</span>
+                        </div>
+                    </div>
+                    <div style="flex:1">
+                        <div style="color:var(--muted)">From E1</div>
+                        <div style="font-weight:600;color:${gapChangeFirst >= 0 ? 'var(--green)' : 'var(--red)'}">${gapChangeFirst >= 0 ? '+' : ''}${gapChangeFirst.toFixed(2)}</div>
+                    </div>
+                </div>
+                
+                <div class="stats-row">
+                    <div class="stat"><div class="stat-label">Samples</div><div class="stat-value">${action.gt}</div></div>
+                    <div class="stat"><div class="stat-label">F1</div><div class="stat-value c-${colorClass(action.f1)}">${action.f1}%</div></div>
+                    <div class="stat"><div class="stat-label">Status</div><div class="stat-value">${dead ? '<span style="color:var(--red)">✗ Dead</span>' : latest.gap >= 0.2 ? '<span style="color:var(--green)">✓ Learning</span>' : '<span style="color:var(--orange)">~ Slow</span>'}</div></div>
+                </div>
+            </div>`;
+        }
+
+        function renderGtItems() {
+            const gridEl = document.getElementById('gt-grid');
+            const deadContainer = document.getElementById('dead-actions-container');
+            const improvingContainer = document.getElementById('improving-actions-container');
+            if (!epochs.length) return;
+
+            const last = epochs[epochs.length - 1];
+            const prevEpochNum = epochs.length > 1 ? epochs[epochs.length - 2].epoch : null;
+            
+            let actions = last.actions.map(a => {
+                const history = getGtHistory(a.name);
+                const valid = history.filter(h => h !== null);
+                const latest = valid[valid.length - 1] || { gap: 0 };
+                const prev = valid.length > 1 ? valid[valid.length - 2] : latest;
+                const first = valid[0] || latest;
+                return {
+                    ...a,
+                    history,
+                    gap: a.predT - a.predF,
+                    gapChangePrev: latest.gap - prev.gap,
+                    gapChangeFirst: latest.gap - first.gap,
+                    dead: latest.gap < 0.05 && a.gt > 50 && a.f1 === 0
+                };
+            });
+
+            // Categories
+            const deadActions = actions.filter(a => a.dead);
+            const decliningActions = actions.filter(a => a.gapChangePrev < -0.02 && !a.dead).sort((a,b) => a.gapChangePrev - b.gapChangePrev);
+            const improvingActions = actions.filter(a => a.gapChangePrev > 0.02 && !a.dead).sort((a,b) => b.gapChangePrev - a.gapChangePrev);
+            const plateauActions = actions.filter(a => Math.abs(a.gapChangePrev) <= 0.02 && a.gap > 0.1 && !a.dead);
+
+            let html = '';
+            if (deadActions.length) html += `<div class="dead-actions-section"><h4>⚠️ Dead (${deadActions.length})</h4><div class="dead-actions-list">${deadActions.map(a => `<span class="dead-action-tag">${a.name} (${a.gap.toFixed(2)})</span>`).join('')}</div></div>`;
+            if (decliningActions.length) html += `<div class="dead-actions-section" style="background:rgba(210,153,34,0.1);border-color:var(--orange)"><h4 style="color:var(--orange)">📉 Declined vs E${prevEpochNum} (${decliningActions.length})</h4><div class="dead-actions-list">${decliningActions.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(210,153,34,0.2);color:var(--orange)">${a.name} (${a.gapChangePrev.toFixed(2)})</span>`).join('')}</div></div>`;
+            if (improvingActions.length) html += `<div class="improving-section"><h4>📈 Improved vs E${prevEpochNum} (${improvingActions.length})</h4><div class="dead-actions-list">${improvingActions.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(63,185,80,0.2);color:var(--green)">${a.name} (+${a.gapChangePrev.toFixed(2)})</span>`).join('')}</div></div>`;
+            if (plateauActions.length > 5) html += `<div style="background:rgba(139,148,158,0.1);border:1px solid var(--muted);border-radius:8px;padding:12px;margin-bottom:16px"><h4 style="color:var(--muted);font-size:12px;margin-bottom:8px">⏸️ Plateau (${plateauActions.length})</h4><div class="dead-actions-list">${plateauActions.slice(0,6).map(a => `<span class="dead-action-tag" style="background:rgba(139,148,158,0.2);color:var(--muted)">${a.name}</span>`).join('')}</div></div>`;
+            
+            deadContainer.innerHTML = html;
+            improvingContainer.innerHTML = '';
+
+            // Sort
+            const sort = document.getElementById('gt-sort')?.value || 'gap-desc';
+            if (sort === 'gap-desc') actions.sort((a,b) => b.gap - a.gap);
+            else if (sort === 'gap-asc') actions.sort((a,b) => a.gap - b.gap);
+            else if (sort === 'change-desc') actions.sort((a,b) => b.gapChangePrev - a.gapChangePrev);
+            else if (sort === 'change-asc') actions.sort((a,b) => a.gapChangePrev - b.gapChangePrev);
+            else if (sort === 'predt-desc') actions.sort((a,b) => b.predT - a.predT);
+            else if (sort === 'predf-asc') actions.sort((a,b) => a.predF - b.predF);
+            else if (sort === 'name') actions.sort((a,b) => a.name.localeCompare(b.name));
+
+            gridEl.innerHTML = actions.map(a => gtCard(a, a.history)).join('');
+        }
+
+        function filterGtItems() {
+            const q = document.getElementById('gt-search')?.value.toLowerCase() || '';
+            document.querySelectorAll('#gt-grid .item-card').forEach(card => {
+                card.style.display = card.dataset.name.includes(q) ? '' : 'none';
+            });
+        }
+
+        function detectPlateau(history) {
+            if (history.length < 3) return { isPlateau: false, epochs: 0 };
+            const recent = history.slice(-3);
+            const range = Math.max(...recent) - Math.min(...recent);
+            if (range < 0.01) return { isPlateau: true, epochs: 3 };
+            if (history.length >= 2) {
+                const last2 = history.slice(-2);
+                if (Math.abs(last2[1] - last2[0]) < 0.005) return { isPlateau: true, epochs: 2 };
+            }
+            return { isPlateau: false, epochs: 0 };
+        }
+
+        function getTrainingHealth() {
+            if (epochs.length < 2) return null;
+            const first = epochs[0], last = epochs[epochs.length - 1], prev = epochs[epochs.length - 2];
+            
+            const gapFirst = (first.summary.actionGtTrue || 0) - (first.summary.actionGtFalse || 0);
+            const gapLast = (last.summary.actionGtTrue || 0) - (last.summary.actionGtFalse || 0);
+            const gapPrev = (prev.summary.actionGtTrue || 0) - (prev.summary.actionGtFalse || 0);
+            
+            const gapChangeTotal = gapLast - gapFirst;
+            const gapChangePrev = gapLast - gapPrev;
+            
+            const f1First = first.summary.actionF1 || 0;
+            const f1Last = last.summary.actionF1 || 0;
+            const f1Prev = prev.summary.actionF1 || 0;
+            const f1ChangeTotal = f1Last - f1First;
+            const f1ChangePrev = f1Last - f1Prev;
+            
+            const predTHistory = epochs.map(e => e.summary.actionGtTrue || 0);
+            const predFHistory = epochs.map(e => e.summary.actionGtFalse || 0);
+            const gapHistory = epochs.map(e => (e.summary.actionGtTrue || 0) - (e.summary.actionGtFalse || 0));
+            
+            const predTPlateau = detectPlateau(predTHistory);
+            const predFPlateau = detectPlateau(predFHistory);
+            const gapPlateau = detectPlateau(gapHistory);
+            
+            // Determine overall status
+            let status = 'good';
+            let message = '';
+            let details = [];
+            
+            if (gapChangePrev > 0.02) {
+                status = 'great';
+                message = '✅ Model is learning well!';
+                details.push(`Gap improved +${(gapChangePrev*100).toFixed(1)}% this epoch`);
+            } else if (gapChangePrev > 0.005) {
+                status = 'good';
+                message = '✓ Model still improving';
+                details.push(`Small improvement +${(gapChangePrev*100).toFixed(2)}% this epoch`);
+            } else if (gapChangePrev > -0.005) {
+                status = 'plateau';
+                message = '⚠️ Approaching plateau';
+                details.push('Gap barely changed this epoch');
+            } else {
+                status = 'declining';
+                message = '⚠️ Gap decreased this epoch';
+                details.push(`Gap dropped ${(gapChangePrev*100).toFixed(2)}%`);
+            }
+            
+            if (predTPlateau.isPlateau) details.push(`PredT plateaued for ${predTPlateau.epochs} epochs`);
+            if (gapPlateau.isPlateau) details.push(`Gap plateaued for ${gapPlateau.epochs} epochs`);
+            if (f1ChangePrev > 0.5) details.push(`F1 still improving (+${f1ChangePrev.toFixed(1)}%)`);
+            
+            // Overall verdict
+            const totalGapImprovement = ((gapLast - gapFirst) / gapFirst * 100).toFixed(0);
+            const avgGapPerEpoch = ((gapLast - gapFirst) / (epochs.length - 1)).toFixed(4);
+            
+            return { status, message, details, gapLast, gapChangeTotal, gapChangePrev, f1Last, f1ChangeTotal, totalGapImprovement, avgGapPerEpoch, predTPlateau, gapPlateau };
+        }
+
+        function renderHealthStatus() {
+            const el = document.getElementById('health-status');
+            const health = getTrainingHealth();
+            if (!health) { el.innerHTML = ''; return; }
+            
+            const statusColors = { great: 'var(--green)', good: 'var(--cyan)', plateau: 'var(--orange)', declining: 'var(--red)' };
+            const statusBg = { great: 'rgba(63,185,80,0.15)', good: 'rgba(88,166,255,0.15)', plateau: 'rgba(210,153,34,0.15)', declining: 'rgba(248,81,73,0.15)' };
+            
+            el.innerHTML = `
+                <div style="background:${statusBg[health.status]};border:1px solid ${statusColors[health.status]};border-radius:8px;padding:12px;margin-bottom:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                        <div>
+                            <div style="font-size:16px;font-weight:700;color:${statusColors[health.status]}">${health.message}</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:4px">${health.details.join(' • ')}</div>
+                        </div>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap">
+                            <div style="text-align:center">
+                                <div style="font-size:9px;color:var(--muted)">OVERALL GAP</div>
+                                <div style="font-size:18px;font-weight:700;color:${statusColors[health.status]}">${health.gapLast.toFixed(3)}</div>
+                                <div style="font-size:10px;color:var(--green)">+${health.totalGapImprovement}% total</div>
+                            </div>
+                            <div style="text-align:center">
+                                <div style="font-size:9px;color:var(--muted)">THIS EPOCH</div>
+                                <div style="font-size:18px;font-weight:700;color:${health.gapChangePrev > 0 ? 'var(--green)' : health.gapChangePrev < 0 ? 'var(--red)' : 'var(--muted)'}">${health.gapChangePrev >= 0 ? '+' : ''}${(health.gapChangePrev*100).toFixed(2)}%</div>
+                                <div style="font-size:10px;color:var(--muted)">gap change</div>
+                            </div>
+                            <div style="text-align:center">
+                                <div style="font-size:9px;color:var(--muted)">ACTION F1</div>
+                                <div style="font-size:18px;font-weight:700;color:var(--orange)">${health.f1Last.toFixed(1)}%</div>
+                                <div style="font-size:10px;color:var(--green)">+${health.f1ChangeTotal.toFixed(1)}% total</div>
+                            </div>
+                            <div style="text-align:center">
+                                <div style="font-size:9px;color:var(--muted)">AVG/EPOCH</div>
+                                <div style="font-size:18px;font-weight:700;color:var(--muted)">${(health.avgGapPerEpoch*100).toFixed(2)}%</div>
+                                <div style="font-size:10px;color:var(--muted)">gap gain</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${health.predTPlateau.isPlateau || health.gapPlateau.isPlateau ? `
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid ${statusColors[health.status]};font-size:11px">
+                        <strong>💡 Recommendation:</strong> ${epochs.length < 10 ? 'Keep training - you\'re only at E' + epochs[epochs.length-1].epoch + '. Expect slower gains but continued improvement through E10-15.' : 'Consider reducing learning rate or checking for overfitting.'}
+                    </div>` : ''}
+                </div>`;
+        }
+
         function renderSummary() {
             const el = document.getElementById('summary');
             if (!epochs.length) { el.innerHTML = ''; return; }
-            const first = epochs[0], last = epochs[epochs.length - 1];
+            const first = epochs[0], last = epochs[epochs.length - 1], prev = epochs.length > 1 ? epochs[epochs.length - 2] : first;
             const m = [['boxMatch', 'Box Match', 'var(--blue)'], ['personMatch', 'Person', 'var(--purple)'], ['actionF1', 'Action F1', 'var(--orange)'], ['relationF1', 'Relation F1', 'var(--cyan)'], ['objectAcc', 'Object Acc', 'var(--green)']];
             el.innerHTML = m.map(([k, l, c]) => {
-                const curr = last.summary[k] || 0, start = first.summary[k] || 0, diff = curr - start;
-                return `<div class="summary-card"><div class="summary-label">${l}</div><div class="summary-value" style="color:${c}">${curr.toFixed(1)}%</div><div class="summary-trend ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)}% from E${first.epoch}</div></div>`;
+                const curr = last.summary[k] || 0, start = first.summary[k] || 0, prevVal = prev.summary[k] || 0;
+                const diffTotal = curr - start;
+                const diffPrev = curr - prevVal;
+                return `<div class="summary-card">
+                    <div class="summary-label">${l}</div>
+                    <div class="summary-value" style="color:${c}">${curr.toFixed(1)}%</div>
+                    <div class="summary-trend ${diffPrev > 0 ? 'up' : diffPrev < 0 ? 'down' : ''}">
+                        ${diffPrev >= 0 ? '↑' : '↓'} ${Math.abs(diffPrev).toFixed(1)}% vs E${prev.epoch}
+                    </div>
+                    <div style="font-size:9px;color:var(--muted)">Total: ${diffTotal >= 0 ? '+' : ''}${diffTotal.toFixed(1)}%</div>
+                </div>`;
             }).join('') + `<div class="summary-card"><div class="summary-label">Epochs</div><div class="summary-value">${epochs.length}</div><div class="summary-trend">E${first.epoch} → E${last.epoch}</div></div>`;
+            
+            renderHealthStatus();
+        }
+
+        function gtOverviewCard(key, label, color, wantHigh = true) {
+            const history = epochs.map(e => e.summary[key] || 0);
+            const current = history[history.length - 1] || 0;
+            const prev = history.length > 1 ? history[history.length - 2] : current;
+            const first = history[0] || 0;
+            const changeFromPrev = current - prev;
+            const changeFromFirst = current - first;
+            // For wantHigh=false (like PredF), improvement means going DOWN
+            const isImproving = wantHigh ? changeFromPrev > 0 : changeFromPrev < 0;
+            const trendClass = isImproving ? 'up' : changeFromPrev === 0 ? 'same' : 'down';
+            const arrow = changeFromPrev > 0 ? '↑' : changeFromPrev < 0 ? '↓' : '→';
+
+            return `<div class="item-card">
+                <div class="item-header">
+                    <div class="item-name">${label}</div>
+                    <div>
+                        <div class="item-current" style="color:${color}">${current.toFixed(4)}</div>
+                        <div class="item-trend ${trendClass}">${arrow} ${Math.abs(changeFromPrev).toFixed(4)} vs prev</div>
+                    </div>
+                </div>
+                <div class="mini-chart">${history.map((v, i) => {
+                    const h = Math.max(4, v * 55);
+                    const barColor = wantHigh ? (v >= 0.5 ? 'var(--green)' : v >= 0.3 ? 'var(--cyan)' : 'var(--orange)') : (v < 0.25 ? 'var(--green)' : v < 0.35 ? 'var(--orange)' : 'var(--red)');
+                    return `<div class="bar-group"><div class="bar-value" style="color:${color}">${v.toFixed(2)}</div><div class="bar" style="height:${h}px;background:${barColor}"></div><div class="bar-label">E${epochs[i].epoch}</div></div>`;
+                }).join('')}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:4px">From E${epochs[0].epoch}: ${changeFromFirst >= 0 ? '+' : ''}${changeFromFirst.toFixed(4)}</div>
+            </div>`;
         }
 
         function renderOverview() {
             const el = document.getElementById('overview-grid');
             if (!epochs.length) { el.innerHTML = '<div class="empty">Import epochs</div>'; return; }
+            
+            // Standard metrics
             const m = [['boxMatch', 'Box Match %', 'var(--blue)'], ['personMatch', 'Person Match %', 'var(--purple)'], ['actionF1', 'Action F1 %', 'var(--orange)'], ['relationF1', 'Relation F1 %', 'var(--cyan)'], ['objectAcc', 'Object Accuracy %', 'var(--green)'], ['actionTop1', 'Action Top-1 %', 'var(--purple)']];
-            el.innerHTML = m.map(([k, l, c]) => overviewCard(k, l, c)).join('');
+            
+            // GT metrics
+            const gtMetrics = [
+                ['actionGtTrue', 'Action PredT (want ↑)', 'var(--green)', true],
+                ['actionGtFalse', 'Action PredF (want ↓)', 'var(--red)', false],
+                ['relationGtTrue', 'Relation PredT', 'var(--cyan)', true]
+            ];
+            
+            // Calculate overall gap history
+            const gapHistory = epochs.map(e => (e.summary.actionGtTrue || 0) - (e.summary.actionGtFalse || 0));
+            const gapCurrent = gapHistory[gapHistory.length - 1] || 0;
+            const gapPrev = gapHistory.length > 1 ? gapHistory[gapHistory.length - 2] : gapCurrent;
+            const gapFirst = gapHistory[0] || 0;
+            const gapChangePrev = gapCurrent - gapPrev;
+            const gapChangeFirst = gapCurrent - gapFirst;
+            
+            const gapCard = `<div class="item-card" style="border-color:var(--blue)">
+                <div class="item-header">
+                    <div class="item-name">Overall Action Gap</div>
+                    <div>
+                        <div class="item-current c-${gapColorClass(gapCurrent)}">${gapCurrent.toFixed(4)}</div>
+                        <div class="item-trend ${gapChangePrev > 0 ? 'up' : gapChangePrev < 0 ? 'down' : 'same'}">${gapChangePrev >= 0 ? '↑' : '↓'} ${Math.abs(gapChangePrev).toFixed(4)} vs prev</div>
+                    </div>
+                </div>
+                <div class="mini-chart">${gapHistory.map((v, i) => {
+                    const h = Math.max(4, v * 100);
+                    const barColor = v >= 0.3 ? 'var(--green)' : v >= 0.2 ? 'var(--cyan)' : v >= 0.1 ? 'var(--orange)' : 'var(--red)';
+                    return `<div class="bar-group"><div class="bar-value" style="color:${barColor}">${v.toFixed(2)}</div><div class="bar" style="height:${h}px;background:${barColor}"></div><div class="bar-label">E${epochs[i].epoch}</div></div>`;
+                }).join('')}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:4px">From E${epochs[0].epoch}: ${gapChangeFirst >= 0 ? '+' : ''}${gapChangeFirst.toFixed(4)} | ${gapCurrent >= 0.2 ? '✓ Good' : gapCurrent >= 0.1 ? '~ OK' : '✗ Needs work'}</div>
+            </div>`;
+            
+            el.innerHTML = m.map(([k, l, c]) => overviewCard(k, l, c)).join('') + 
+                '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:8px 0;padding-top:8px"><h3 style="font-size:12px;color:var(--muted);margin-bottom:8px">📊 GT Analysis Metrics (Discrimination)</h3></div>' +
+                gtMetrics.map(([k, l, c, wantHigh]) => gtOverviewCard(k, l, c, wantHigh)).join('') + gapCard;
         }
 
         function getAllNames(type) {
@@ -612,17 +1388,62 @@
             let names = getAllNames(type);
             const sortEl = document.getElementById(type + '-sort');
             const sort = sortEl?.value || 'f1-desc';
+            const last = epochs[epochs.length - 1];
+            const prevEpochNum = epochs.length > 1 ? epochs[epochs.length - 2].epoch : null;
 
-            names = names.map(n => ({ name: n, history: getHistory(n, type) }));
-            names.forEach(n => {
-                n.current = n.history.filter(v => v !== null).slice(-1)[0] || 0;
-                n.change = calcChange(n.history);
+            names = names.map(n => {
+                const history = getHistory(n, type);
+                const validHist = history.filter(v => v !== null);
+                const current = validHist.slice(-1)[0] || 0;
+                const prevVal = validHist.length > 1 ? validHist[validHist.length - 2] : current;
+                const firstVal = validHist[0] || current;
+                const latest = getLatest(n, type);
+                const gap = latest && latest.predT !== undefined ? (latest.predT - latest.predF) : 0;
+                return { 
+                    name: n, 
+                    history, 
+                    current,
+                    changePrev: current - prevVal,
+                    changeFirst: current - firstVal,
+                    gap,
+                    latest
+                };
             });
 
+            // Render category sections for all types
+            const catEl = document.getElementById(type + 's-categories');
+            if (catEl) {
+                const label = type === 'action' ? 'Actions' : type === 'relation' ? 'Relations' : 'Objects';
+                let catHtml = '';
+                
+                if (type === 'object') {
+                    // Objects: low accuracy = struggling
+                    const lowAccItems = names.filter(n => n.current < 50 && n.latest && n.latest.gt > 20);
+                    const decliningItems = names.filter(n => n.changePrev < -5 && !lowAccItems.includes(n)).sort((a,b) => a.changePrev - b.changePrev);
+                    const improvingItems = names.filter(n => n.changePrev > 5 && !lowAccItems.includes(n)).sort((a,b) => b.changePrev - a.changePrev);
+                    
+                    if (lowAccItems.length) catHtml += `<div class="dead-actions-section"><h4>⚠️ Low Accuracy ${label} (${lowAccItems.length})</h4><div class="dead-actions-list">${lowAccItems.map(a => `<span class="dead-action-tag">${a.name} (${a.current.toFixed(0)}%)</span>`).join('')}</div></div>`;
+                    if (decliningItems.length) catHtml += `<div class="dead-actions-section" style="background:rgba(210,153,34,0.1);border-color:var(--orange)"><h4 style="color:var(--orange)">📉 Declined vs E${prevEpochNum} (${decliningItems.length})</h4><div class="dead-actions-list">${decliningItems.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(210,153,34,0.2);color:var(--orange)">${a.name} (${a.changePrev.toFixed(0)}%)</span>`).join('')}</div></div>`;
+                    if (improvingItems.length) catHtml += `<div class="improving-section"><h4>📈 Improved vs E${prevEpochNum} (${improvingItems.length})</h4><div class="dead-actions-list">${improvingItems.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(63,185,80,0.2);color:var(--green)">${a.name} (+${a.changePrev.toFixed(0)}%)</span>`).join('')}</div></div>`;
+                } else {
+                    // Actions and Relations: F1 = 0 is dead
+                    const deadItems = names.filter(n => n.latest && n.latest.f1 === 0 && n.latest.gt > 50);
+                    const decliningItems = names.filter(n => n.changePrev < -2 && !deadItems.includes(n)).sort((a,b) => a.changePrev - b.changePrev);
+                    const improvingItems = names.filter(n => n.changePrev > 2 && !deadItems.includes(n)).sort((a,b) => b.changePrev - a.changePrev);
+                    
+                    if (deadItems.length) catHtml += `<div class="dead-actions-section"><h4>⚠️ Dead ${label} (${deadItems.length})</h4><div class="dead-actions-list">${deadItems.map(a => `<span class="dead-action-tag">${a.name} (F1: ${a.current}%)</span>`).join('')}</div></div>`;
+                    if (decliningItems.length) catHtml += `<div class="dead-actions-section" style="background:rgba(210,153,34,0.1);border-color:var(--orange)"><h4 style="color:var(--orange)">📉 Declined vs E${prevEpochNum} (${decliningItems.length})</h4><div class="dead-actions-list">${decliningItems.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(210,153,34,0.2);color:var(--orange)">${a.name} (${a.changePrev.toFixed(0)}%)</span>`).join('')}</div></div>`;
+                    if (improvingItems.length) catHtml += `<div class="improving-section"><h4>📈 Improved vs E${prevEpochNum} (${improvingItems.length})</h4><div class="dead-actions-list">${improvingItems.slice(0,8).map(a => `<span class="dead-action-tag" style="background:rgba(63,185,80,0.2);color:var(--green)">${a.name} (+${a.changePrev.toFixed(0)}%)</span>`).join('')}</div></div>`;
+                }
+                catEl.innerHTML = catHtml;
+            }
+
+            // Sorting
             if (sort === 'f1-desc' || sort === 'acc-desc') names.sort((a, b) => b.current - a.current);
             else if (sort === 'f1-asc' || sort === 'acc-asc') names.sort((a, b) => a.current - b.current);
-            else if (sort === 'change-desc') names.sort((a, b) => b.change - a.change);
-            else if (sort === 'change-asc') names.sort((a, b) => a.change - b.change);
+            else if (sort === 'change-desc') names.sort((a, b) => b.changePrev - a.changePrev);
+            else if (sort === 'change-asc') names.sort((a, b) => a.changePrev - b.changePrev);
+            else if (sort === 'gap-desc') names.sort((a, b) => b.gap - a.gap);
             else if (sort === 'name') names.sort((a, b) => a.name.localeCompare(b.name));
 
             grid.innerHTML = names.map(n => itemCard(n.name, type)).join('');
@@ -649,6 +1470,319 @@
             document.getElementById(type + '-search')?.addEventListener('input', () => filterItems(type));
             document.getElementById(type + '-sort')?.addEventListener('change', () => renderItems(type));
         });
+
+        document.getElementById('gt-search')?.addEventListener('input', filterGtItems);
+        document.getElementById('gt-sort')?.addEventListener('change', renderGtItems);
+
+        // ========== EXPORT FOR AI ==========
+        function generateExport() {
+            if (!epochs.length) return 'No data to export. Import epochs first.';
+            
+            const first = epochs[0], last = epochs[epochs.length - 1];
+            const prev = epochs.length > 1 ? epochs[epochs.length - 2] : first;
+            const health = getTrainingHealth();
+            const issues = detectAllIssues();
+            
+            let out = `=== YOWO TRAINING ANALYSIS EXPORT ===\n`;
+            out += `Generated: ${new Date().toISOString()}\n`;
+            out += `Epochs: E${first.epoch} to E${last.epoch} (${epochs.length} total)\n\n`;
+            
+            // Overall Status
+            out += `## OVERALL STATUS\n`;
+            if (health) {
+                out += `Status: ${health.message}\n`;
+                out += `Details: ${health.details.join(', ')}\n`;
+            }
+            out += `\n`;
+            
+            // Summary Metrics Table
+            out += `## SUMMARY METRICS\n`;
+            out += `| Metric | Current | vs E${prev.epoch} | vs E${first.epoch} |\n`;
+            out += `|--------|---------|---------|---------|\n`;
+            const summaryKeys = [
+                ['boxMatch', 'Box Match %'],
+                ['personMatch', 'Person Match %'],
+                ['actionF1', 'Action F1 %'],
+                ['relationF1', 'Relation F1 %'],
+                ['objectAcc', 'Object Acc %'],
+                ['actionTop1', 'Action Top-1 %']
+            ];
+            summaryKeys.forEach(([k, label]) => {
+                const curr = last.summary[k] || 0;
+                const prevVal = prev.summary[k] || 0;
+                const firstVal = first.summary[k] || 0;
+                const dPrev = curr - prevVal;
+                const dFirst = curr - firstVal;
+                out += `| ${label} | ${curr.toFixed(1)}% | ${dPrev >= 0 ? '+' : ''}${dPrev.toFixed(1)}% | ${dFirst >= 0 ? '+' : ''}${dFirst.toFixed(1)}% |\n`;
+            });
+            out += `\n`;
+            
+            // GT Analysis
+            out += `## GT ANALYSIS (Discrimination Ability)\n`;
+            const predT = last.summary.actionGtTrue || 0;
+            const predF = last.summary.actionGtFalse || 0;
+            const gap = predT - predF;
+            const predTPrev = prev.summary.actionGtTrue || 0;
+            const predFPrev = prev.summary.actionGtFalse || 0;
+            const gapPrev = predTPrev - predFPrev;
+            const predTFirst = first.summary.actionGtTrue || 0;
+            const predFFirst = first.summary.actionGtFalse || 0;
+            const gapFirst = predTFirst - predFFirst;
+            
+            out += `Overall PredT: ${predT.toFixed(4)} (${predT - predTPrev >= 0 ? '+' : ''}${(predT - predTPrev).toFixed(4)} vs E${prev.epoch})\n`;
+            out += `Overall PredF: ${predF.toFixed(4)} (${predF - predFPrev >= 0 ? '+' : ''}${(predF - predFPrev).toFixed(4)} vs E${prev.epoch})\n`;
+            out += `Overall Gap: ${gap.toFixed(4)} (${gap - gapPrev >= 0 ? '+' : ''}${(gap - gapPrev).toFixed(4)} vs E${prev.epoch}, ${gap - gapFirst >= 0 ? '+' : ''}${(gap - gapFirst).toFixed(4)} vs E${first.epoch})\n`;
+            out += `Gap Status: ${gap >= 0.25 ? '✓ Good' : gap >= 0.15 ? '~ OK' : '✗ Needs work'}\n\n`;
+            
+            // Per-epoch GT progression
+            out += `### GT Progression by Epoch\n`;
+            out += `| Epoch | PredT | PredF | Gap | Δ Gap |\n`;
+            out += `|-------|-------|-------|-----|-------|\n`;
+            epochs.forEach((e, i) => {
+                const pt = e.summary.actionGtTrue || 0;
+                const pf = e.summary.actionGtFalse || 0;
+                const g = pt - pf;
+                const prevG = i > 0 ? (epochs[i-1].summary.actionGtTrue || 0) - (epochs[i-1].summary.actionGtFalse || 0) : g;
+                const dg = g - prevG;
+                out += `| E${e.epoch} | ${pt.toFixed(4)} | ${pf.toFixed(4)} | ${g.toFixed(4)} | ${i > 0 ? (dg >= 0 ? '+' : '') + dg.toFixed(4) : '-'} |\n`;
+            });
+            out += `\n`;
+            
+            // Per-Action GT Details
+            out += `### Per-Action GT Details (${last.actions.length} actions)\n`;
+            out += `| Action | Gap | ΔPrev | ΔE1 | PredT | PredF | F1% | Samples | Status |\n`;
+            out += `|--------|-----|-------|-----|-------|-------|-----|---------|--------|\n`;
+            
+            const actionDetails = last.actions.map(a => {
+                const history = getGtHistory(a.name);
+                const valid = history.filter(h => h !== null);
+                const latest = valid[valid.length - 1] || { gap: 0, predT: 0, predF: 0 };
+                const prevA = valid.length > 1 ? valid[valid.length - 2] : latest;
+                const firstA = valid[0] || latest;
+                const gapChgPrev = latest.gap - prevA.gap;
+                const gapChgFirst = latest.gap - firstA.gap;
+                const dead = latest.gap < 0.05 && a.gt > 50 && a.f1 === 0;
+                const status = dead ? '✗ Dead' : latest.gap >= 0.2 ? '✓ Learning' : latest.gap >= 0.05 ? '~ Slow' : '✗ Struggling';
+                return { ...a, latest, gapChgPrev, gapChgFirst, status };
+            }).sort((a, b) => b.latest.gap - a.latest.gap);
+            
+            actionDetails.forEach(a => {
+                out += `| ${a.name} | ${a.latest.gap.toFixed(2)} | ${a.gapChgPrev >= 0 ? '+' : ''}${a.gapChgPrev.toFixed(2)} | ${a.gapChgFirst >= 0 ? '+' : ''}${a.gapChgFirst.toFixed(2)} | ${a.latest.predT.toFixed(2)} | ${a.latest.predF.toFixed(2)} | ${a.f1}% | ${a.gt} | ${a.status} |\n`;
+            });
+            out += `\n`;
+            
+            // Action Categories
+            const deadActions = actionDetails.filter(a => a.status === '✗ Dead');
+            const decliningActions = actionDetails.filter(a => a.gapChgPrev < -0.02 && a.status !== '✗ Dead');
+            const improvingActions = actionDetails.filter(a => a.gapChgPrev > 0.02 && a.status !== '✗ Dead');
+            const plateauActions = actionDetails.filter(a => Math.abs(a.gapChgPrev) <= 0.02 && a.latest.gap > 0.1);
+            
+            if (deadActions.length) {
+                out += `### Dead Actions (${deadActions.length})\n`;
+                deadActions.forEach(a => out += `- ${a.name} (Gap: ${a.latest.gap.toFixed(2)}, F1: ${a.f1}%, Samples: ${a.gt})\n`);
+                out += `\n`;
+            }
+            if (decliningActions.length) {
+                out += `### Declining Actions vs E${prev.epoch} (${decliningActions.length})\n`;
+                decliningActions.sort((a,b) => a.gapChgPrev - b.gapChgPrev).forEach(a => out += `- ${a.name} (${a.gapChgPrev.toFixed(2)} gap change)\n`);
+                out += `\n`;
+            }
+            if (improvingActions.length) {
+                out += `### Improving Actions vs E${prev.epoch} (${improvingActions.length})\n`;
+                improvingActions.sort((a,b) => b.gapChgPrev - a.gapChgPrev).forEach(a => out += `- ${a.name} (+${a.gapChgPrev.toFixed(2)} gap change)\n`);
+                out += `\n`;
+            }
+            if (plateauActions.length) {
+                out += `### Plateau Actions (${plateauActions.length})\n`;
+                plateauActions.forEach(a => out += `- ${a.name} (Gap: ${a.latest.gap.toFixed(2)})\n`);
+                out += `\n`;
+            }
+            
+            // Actions Tab Data
+            out += `## ACTIONS F1 BREAKDOWN (${last.actions.length} actions)\n`;
+            out += `| Action | F1% | ΔPrev | ΔE1 | P% | R% | Gap | Samples |\n`;
+            out += `|--------|-----|-------|-----|----|----|-----|---------|\n`;
+            
+            const actionsWithHistory = last.actions.map(a => {
+                const hist = getHistory(a.name, 'action');
+                const curr = hist.filter(v => v !== null).slice(-1)[0] || 0;
+                const prevVal = hist.length > 1 && hist[hist.length - 2] !== null ? hist[hist.length - 2] : curr;
+                const firstVal = hist.filter(v => v !== null)[0] || curr;
+                return { ...a, hist, curr, dPrev: curr - prevVal, dFirst: curr - firstVal };
+            }).sort((a, b) => b.f1 - a.f1);
+            
+            actionsWithHistory.forEach(a => {
+                const gap = (a.predT - a.predF).toFixed(2);
+                out += `| ${a.name} | ${a.f1}% | ${a.dPrev >= 0 ? '+' : ''}${a.dPrev.toFixed(0)}% | ${a.dFirst >= 0 ? '+' : ''}${a.dFirst.toFixed(0)}% | ${a.p}% | ${a.r}% | ${gap} | ${a.gt} |\n`;
+            });
+            out += `\n`;
+            
+            // Epoch-by-epoch F1 for each action
+            out += `### Action F1 by Epoch\n`;
+            out += `| Action | ${epochs.map(e => 'E' + e.epoch).join(' | ')} |\n`;
+            out += `|--------| ${epochs.map(() => '---').join(' | ')} |\n`;
+            actionsWithHistory.forEach(a => {
+                out += `| ${a.name} | ${a.hist.map(v => v !== null ? v + '%' : '-').join(' | ')} |\n`;
+            });
+            out += `\n`;
+            
+            // Relations Tab
+            out += `## RELATIONS BREAKDOWN (${last.relations.length} relations)\n`;
+            out += `| Relation | F1% | ΔPrev | ΔE1 | PredT | PredF | Gap | Samples |\n`;
+            out += `|----------|-----|-------|-----|-------|-------|-----|---------|\n`;
+            
+            last.relations.sort((a, b) => b.f1 - a.f1).forEach(r => {
+                const hist = getHistory(r.name, 'relation');
+                const curr = hist.filter(v => v !== null).slice(-1)[0] || 0;
+                const prevVal = hist.length > 1 && hist[hist.length - 2] !== null ? hist[hist.length - 2] : curr;
+                const firstVal = hist.filter(v => v !== null)[0] || curr;
+                const gap = (r.predT - r.predF).toFixed(2);
+                out += `| ${r.name} | ${r.f1}% | ${curr - prevVal >= 0 ? '+' : ''}${(curr - prevVal).toFixed(0)}% | ${curr - firstVal >= 0 ? '+' : ''}${(curr - firstVal).toFixed(0)}% | ${r.predT.toFixed(2)} | ${r.predF.toFixed(2)} | ${gap} | ${r.gt} |\n`;
+            });
+            out += `\n`;
+            
+            // Objects Tab
+            out += `## OBJECTS BREAKDOWN (${last.objects.length} objects)\n`;
+            out += `| Object | Acc% | ΔPrev | ΔE1 | Correct/Total | Conf |\n`;
+            out += `|--------|------|-------|-----|---------------|------|\n`;
+            
+            last.objects.sort((a, b) => b.acc - a.acc).forEach(o => {
+                const hist = getHistory(o.name, 'object');
+                const curr = hist.filter(v => v !== null).slice(-1)[0] || 0;
+                const prevVal = hist.length > 1 && hist[hist.length - 2] !== null ? hist[hist.length - 2] : curr;
+                const firstVal = hist.filter(v => v !== null)[0] || curr;
+                out += `| ${o.name} | ${o.acc.toFixed(1)}% | ${curr - prevVal >= 0 ? '+' : ''}${(curr - prevVal).toFixed(1)}% | ${curr - firstVal >= 0 ? '+' : ''}${(curr - firstVal).toFixed(1)}% | ${o.correct}/${o.gt} | ${o.conf.toFixed(3)} |\n`;
+            });
+            out += `\n`;
+            
+            // Issues Detected
+            out += `## ISSUES DETECTED\n`;
+            if (issues.length === 0) {
+                out += `No significant issues detected.\n`;
+            } else {
+                issues.forEach(issue => out += `- ${issue}\n`);
+            }
+            out += `\n`;
+            
+            // Recommendations
+            out += `## RECOMMENDATIONS\n`;
+            if (health && health.predTPlateau.isPlateau) out += `- PredT has plateaued - consider adjusting learning rate\n`;
+            if (health && health.gapPlateau.isPlateau) out += `- Gap has plateaued - model may need more diverse training data\n`;
+            if (deadActions.length > 5) out += `- ${deadActions.length} dead actions - check if these classes have enough samples\n`;
+            if (decliningActions.length > 3) out += `- ${decliningActions.length} declining actions - possible overfitting on other classes\n`;
+            if (epochs.length < 10) out += `- Only ${epochs.length} epochs trained - continue to E10-15 for better convergence\n`;
+            if (gap < 0.2) out += `- Overall gap is low (${gap.toFixed(2)}) - model needs more training\n`;
+            if (predF > 0.3) out += `- PredF is high (${predF.toFixed(2)}) - too many false positives\n`;
+            
+            out += `\n=== END EXPORT ===\n`;
+            return out;
+        }
+        
+        function detectAllIssues() {
+            const issues = [];
+            if (!epochs.length) return issues;
+            
+            const last = epochs[epochs.length - 1];
+            const prev = epochs.length > 1 ? epochs[epochs.length - 2] : last;
+            const first = epochs[0];
+            
+            // Check for dead actions
+            const deadCount = last.actions.filter(a => a.f1 === 0 && a.gt > 50).length;
+            if (deadCount > 0) issues.push(`${deadCount} dead actions with 0% F1 despite having samples`);
+            
+            // Check for declining gap
+            const gapLast = (last.summary.actionGtTrue || 0) - (last.summary.actionGtFalse || 0);
+            const gapPrev = (prev.summary.actionGtTrue || 0) - (prev.summary.actionGtFalse || 0);
+            if (gapLast < gapPrev - 0.01) issues.push(`Overall gap declined from E${prev.epoch} to E${last.epoch}`);
+            
+            // Check for declining actions
+            let decliningCount = 0;
+            last.actions.forEach(a => {
+                const hist = getGtHistory(a.name);
+                const valid = hist.filter(h => h !== null);
+                if (valid.length > 1) {
+                    const latestGap = valid[valid.length - 1].gap;
+                    const prevGap = valid[valid.length - 2].gap;
+                    if (latestGap < prevGap - 0.02) decliningCount++;
+                }
+            });
+            if (decliningCount > 3) issues.push(`${decliningCount} actions have declining gaps`);
+            
+            // Check for low sample actions
+            const lowSampleActions = last.actions.filter(a => a.gt < 50 && a.gt > 0);
+            if (lowSampleActions.length > 5) issues.push(`${lowSampleActions.length} actions have fewer than 50 samples`);
+            
+            // Check for plateau
+            const health = getTrainingHealth();
+            if (health && health.gapPlateau.isPlateau) issues.push('Gap has plateaued for multiple epochs');
+            if (health && health.predTPlateau.isPlateau) issues.push('PredT has plateaued for multiple epochs');
+            
+            // Check F1 trend
+            const f1Last = last.summary.actionF1 || 0;
+            const f1Prev = prev.summary.actionF1 || 0;
+            if (f1Last < f1Prev - 0.5) issues.push(`Action F1 dropped from ${f1Prev.toFixed(1)}% to ${f1Last.toFixed(1)}%`);
+            
+            return issues;
+        }
+
+        function setStatusMessage(message, clearAfterMs = 3000) {
+            const statusEl = document.getElementById('status');
+            if (!statusEl) return;
+            statusEl.textContent = message;
+            if (clearAfterMs > 0) setTimeout(() => {
+                if (statusEl.textContent === message) statusEl.textContent = '';
+            }, clearAfterMs);
+        }
+
+        function fallbackCopyText(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (err) {
+                copied = false;
+            }
+            document.body.removeChild(textarea);
+            return copied;
+        }
+        
+        async function exportForAI() {
+            let text = '';
+            try {
+                text = generateExport();
+            } catch (err) {
+                console.error('Export generation failed:', err);
+                setStatusMessage('❌ Export failed - see console');
+                return;
+            }
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    setStatusMessage('✅ Exported to clipboard!');
+                    return;
+                }
+            } catch (err) {
+                console.error('Clipboard API copy failed:', err);
+            }
+
+            const copied = fallbackCopyText(text);
+            if (copied) {
+                setStatusMessage('✅ Exported to clipboard!');
+                return;
+            }
+
+            document.getElementById('input').value = text;
+            setStatusMessage('📋 Export shown in textarea (copy manually)', 5000);
+        }
 
         // Init
         epochs = JSON.parse(localStorage.getItem('yowo') || '[]');
