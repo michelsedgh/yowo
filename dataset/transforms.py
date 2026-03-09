@@ -25,6 +25,28 @@ class Augmentation(object):
 
 
     def random_distort_image(self, video_clip):
+        """Fast tensor-based color distortion - avoids slow PIL HSV conversion."""
+        dhue = random.uniform(-self.hue, self.hue)
+        dsat = self.rand_scale(self.saturation)
+        dexp = self.rand_scale(self.exposure)
+        
+        # Convert all frames to tensor first (batched)
+        tensors = [F.to_tensor(img) for img in video_clip]
+        
+        # Apply distortions using fast torchvision functional ops
+        result = []
+        for t in tensors:
+            # Brightness (exposure) - simple multiply
+            t = torch.clamp(t * dexp, 0, 1)
+            # Saturation and Hue - use torchvision's optimized C++ backend
+            t = F.adjust_saturation(t, dsat)
+            t = F.adjust_hue(t, dhue)
+            result.append(t)
+        
+        return result
+    
+    def random_distort_image_pil(self, video_clip):
+        """Legacy PIL version - kept for reference but NOT used (slow)."""
         dhue = random.uniform(-self.hue, self.hue)
         dsat = self.rand_scale(self.saturation)
         dexp = self.rand_scale(self.exposure)
@@ -123,7 +145,7 @@ class Augmentation(object):
         if flip:
             video_clip = [img.transpose(Image.FLIP_LEFT_RIGHT) for img in video_clip]
 
-        # distort
+        # distort (also converts to tensor - returns list of tensors)
         video_clip = self.random_distort_image(video_clip)
 
         # process target
@@ -134,8 +156,7 @@ class Augmentation(object):
         else:
             target = np.array([])
             
-        # to tensor
-        video_clip = self.to_tensor(video_clip)
+        # video_clip is already tensors from random_distort_image
         target = torch.as_tensor(target).float()
 
         return video_clip, target 

@@ -119,26 +119,32 @@ class CharadesAGDataset(Dataset):
         
         video_clip = []
         frames_dir = os.path.join(self.data_root, 'frames', video_id_full)
+        
+        # Cache the frame extension for this video (avoid repeated try/except)
+        if not hasattr(self, '_frame_ext_cache'):
+            self._frame_ext_cache = {}
+        
+        ext = self._frame_ext_cache.get(video_id_full)
+        if ext is None:
+            # Determine extension once per video
+            test_path_jpg = os.path.join(frames_dir, f"{frame_idx:06d}.jpg")
+            ext = 'jpg' if os.path.exists(test_path_jpg) else 'png'
+            self._frame_ext_cache[video_id_full] = ext
+        
         for i in range(self.len_clip):
             f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
             
-            # Try loading directly without os.path.exists (faster on network/cloud storage)
-            # Try JPG first, then PNG, then keyframe fallback
-            frame = None
-            for f_try in [f_clamped, frame_idx]:  # Try target frame, then keyframe fallback
-                for ext in ['jpg', 'png']:
-                    try:
-                        img_path = os.path.join(frames_dir, f"{f_try:06d}.{ext}")
-                        frame = Image.open(img_path).convert('RGB')
-                        break
-                    except:
-                        continue
-                if frame is not None:
-                    break
-            
-            if frame is None:
-                frame = Image.new('RGB', (self.img_size, self.img_size))
+            img_path = os.path.join(frames_dir, f"{f_clamped:06d}.{ext}")
+            try:
+                frame = Image.open(img_path).convert('RGB')
+            except:
+                # Fallback to keyframe
+                img_path = os.path.join(frames_dir, f"{frame_idx:06d}.{ext}")
+                try:
+                    frame = Image.open(img_path).convert('RGB')
+                except:
+                    frame = Image.new('RGB', (self.img_size, self.img_size))
             video_clip.append(frame)
             
         ow, oh = video_clip[-1].size
