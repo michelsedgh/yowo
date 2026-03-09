@@ -318,7 +318,10 @@ def train():
         epoch_start = time.time()
         
         if args.distributed:
-            dataloader.batch_sampler.sampler.set_epoch(epoch)            
+            dataloader.batch_sampler.sampler.set_epoch(epoch)
+        
+        if hasattr(dataloader.dataset, 'resample_negatives'):
+            dataloader.dataset.resample_negatives()
 
         # train one epoch
         for iter_i, (frame_ids, video_clips, targets) in enumerate(dataloader):
@@ -558,7 +561,7 @@ def print_log(lr, epoch, max_epoch, iter_i, epoch_size, loss_dict, batch_time, a
     loss_obj = loss_dict.get('loss_obj', 0)
     loss_rel = loss_dict.get('loss_rel', 0)
     loss_box = loss_dict.get('loss_box', 0)
-    total_loss = loss_dict.get('losses', 0) * accumulate
+    total_loss = loss_dict.get('losses', 0)
     
     # Convert tensors to floats
     if hasattr(loss_conf, 'item'): loss_conf = loss_conf.item()

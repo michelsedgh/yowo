@@ -46,7 +46,7 @@ class SmartHomeDataset(Dataset):
             self.config = json.load(f)
         
         self.num_smart_home_actions = self.config['num_actions']
-        self.action_indices = set(self.config['action_indices'])
+        self.action_indices = set(int(k) for k in self.config['old_to_new'].keys())
         self.old_to_new = {int(k): v for k, v in self.config['old_to_new'].items()}
         self.is_train = is_train
         # Include negatives in both train and eval to properly measure false positives
@@ -67,7 +67,20 @@ class SmartHomeDataset(Dataset):
         # Filter keyframes: positives (have smart home actions) + sampled negatives
         self.positive_indices, self.negative_indices = self._filter_keyframes()
         
-        # Sample negatives: ~negative_ratio of positive count
+        # Sample negatives and build combined index
+        self.resample_negatives()
+        
+        print(f"SmartHomeDataset ({'train' if is_train else 'val'}):")
+        print(f"  Positive frames: {len(self.positive_indices)}")
+        print(f"  Negative frames: {len(self.negative_set)} ({100*len(self.negative_set)/max(1,len(self.positive_indices)):.1f}% of positives)")
+        print(f"  Total frames: {len(self.filtered_indices)}")
+        print(f"  Actions: {self.num_smart_home_actions}")
+        print(f"  Objects: {self.num_objects}")
+        print(f"  Relations: {self.num_relations}")
+        print(f"  Total classes: {self.num_classes}")
+    
+    def resample_negatives(self):
+        """Re-draw negative samples. Call at the start of each epoch for variety."""
         num_negatives = int(len(self.positive_indices) * self.negative_ratio)
         if num_negatives > 0 and len(self.negative_indices) > 0:
             sampled_negatives = random.sample(
@@ -76,20 +89,8 @@ class SmartHomeDataset(Dataset):
             )
         else:
             sampled_negatives = []
-        
-        # Combined indices: all positives + sampled negatives
         self.filtered_indices = self.positive_indices + sampled_negatives
-        # Track which are negatives (for __getitem__ to zero out actions)
         self.negative_set = set(sampled_negatives)
-        
-        print(f"SmartHomeDataset ({'train' if is_train else 'val'}):")
-        print(f"  Positive frames: {len(self.positive_indices)}")
-        print(f"  Negative frames: {len(sampled_negatives)} ({100*len(sampled_negatives)/max(1,len(self.positive_indices)):.1f}% of positives)")
-        print(f"  Total frames: {len(self.filtered_indices)}")
-        print(f"  Actions: {self.num_smart_home_actions}")
-        print(f"  Objects: {self.num_objects}")
-        print(f"  Relations: {self.num_relations}")
-        print(f"  Total classes: {self.num_classes}")
     
     def _filter_keyframes(self):
         """Separate keyframes into positives (have smart home actions) and negatives (no smart home actions).
