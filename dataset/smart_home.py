@@ -92,24 +92,66 @@ class SmartHomeDataset(Dataset):
         print(f"  Total classes: {self.num_classes}")
     
     def _filter_keyframes(self):
-        """Separate keyframes into positives (have smart home actions) and negatives (no smart home actions)."""
+        """Separate keyframes into positives (have smart home actions) and negatives (no smart home actions).
+        
+        Uses caching to avoid re-filtering on every run (288K+ keyframes is slow).
+        """
+        import hashlib
+        
+        # Create cache key based on: keyframe count, action indices, split
+        cache_key = f"{len(self.base_dataset)}_{sorted(self.action_indices)}_{self.is_train}"
+        cache_hash = hashlib.md5(cache_key.encode()).hexdigest()[:8]
+        cache_dir = os.path.join(os.path.dirname(__file__), '../.cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f'smart_home_filter_{cache_hash}.npz')
+        
+        # Try loading from cache
+        if os.path.exists(cache_file):
+            try:
+                cached = np.load(cache_file)
+                print(f"  Loaded filtered indices from cache ({cache_file})")
+                return cached['positives'].tolist(), cached['negatives'].tolist()
+            except:
+                pass  # Cache corrupted, recompute
+        
+        # Compute from scratch with progress
+        print(f"  Filtering {len(self.base_dataset)} keyframes (one-time, will be cached)...")
         positives = []
         negatives = []
         
-        for idx in range(len(self.base_dataset)):
-            keyframe_id = self.base_dataset.keyframes[idx]
-            video_id_full = keyframe_id.split('/')[0]
-            video_id = video_id_full.replace('.mp4', '')
-            frame_file = keyframe_id.split('/')[1]
-            frame_idx = int(frame_file.replace('.png', '').replace('.jpg', ''))
+        # Pre-fetch frequently accessed data for speed
+        keyframes = self.base_dataset.keyframes
+        video_fps = self.base_dataset.video_fps
+        video_actions = self.base_dataset.video_actions
+        action_indices = self.action_indices
+        
+        total = len(self.base_dataset)
+        last_pct = -1
+        
+        for idx in range(total):
+            # Progress every 10%
+            pct = (idx * 100) // total
+            if pct >= last_pct + 10:
+                print(f"    {pct}% ({idx}/{total})")
+                last_pct = pct
             
-            fps = self.base_dataset.video_fps.get(video_id_full, 24.0)
+            keyframe_id = keyframes[idx]
+            slash_pos = keyframe_id.index('/')
+            video_id_full = keyframe_id[:slash_pos]
+            video_id = video_id_full[:-4] if video_id_full.endswith('.mp4') else video_id_full
+            frame_file = keyframe_id[slash_pos+1:]
+            
+            # Parse frame index (remove .png or .jpg)
+            dot_pos = frame_file.rfind('.')
+            frame_idx = int(frame_file[:dot_pos])
+            
+            fps = video_fps.get(video_id_full, 24.0)
             time_sec = (frame_idx - 1) / fps
             
             # Check if any smart home action is active at this time
             has_smart_home = False
-            for cls_idx, start, end in self.base_dataset.video_actions.get(video_id, []):
-                if start <= time_sec <= end and cls_idx in self.action_indices:
+            for cls_idx, start, end in video_actions.get(video_id, []):
+                if start <= time_sec <= end and cls_idx in action_indices:
                     has_smart_home = True
                     break
             
@@ -117,6 +159,13 @@ class SmartHomeDataset(Dataset):
                 positives.append(idx)
             else:
                 negatives.append(idx)
+        
+        # Save to cache
+        try:
+            np.savez(cache_file, positives=np.array(positives), negatives=np.array(negatives))
+            print(f"  Cached filtered indices to {cache_file}")
+        except Exception as e:
+            print(f"  Warning: Could not cache filtered indices: {e}")
         
         return positives, negatives
     

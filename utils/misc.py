@@ -193,6 +193,7 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
                                                             batch_size, 
                                                             drop_last=True)
         # train dataloader - optimized for A100
+        # Use 'spawn' context to avoid fork-after-CUDA-init deadlock with AMP
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             batch_sampler=batch_sampler_train,
@@ -200,10 +201,12 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             num_workers=args.num_workers,
             pin_memory=True,
             persistent_workers=args.num_workers > 0,  # Keep workers alive between epochs
-            prefetch_factor=3 if args.num_workers > 0 else None  # Prefetch more batches
+            prefetch_factor=3 if args.num_workers > 0 else None,  # Prefetch more batches
+            multiprocessing_context='spawn' if args.num_workers > 0 and args.cuda else None
             )
     else:
         # test dataloader - optimized
+        # Use 'spawn' context to avoid fork-after-CUDA-init deadlock with AMP
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             shuffle=False,
@@ -212,7 +215,8 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             drop_last=False,
             pin_memory=True,
             persistent_workers=args.num_workers > 0,
-            prefetch_factor=3 if args.num_workers > 0 else None
+            prefetch_factor=3 if args.num_workers > 0 else None,
+            multiprocessing_context='spawn' if args.num_workers > 0 and getattr(args, 'cuda', False) else None
             )
     
     return dataloader
