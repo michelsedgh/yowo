@@ -272,11 +272,10 @@ class MultiTaskCriterion(object):
         is_person_masks = []  # Track which matched GT is a Person (for action masking)
 
         for batch_idx in range(bs):
-            tgt_labels = targets[batch_idx]["labels"].to(device)
-            tgt_bboxes = targets[batch_idx]["boxes"].to(device)
-            tgt_bboxes_scaled = tgt_bboxes * self.img_size
+            tgt_labels_cpu = targets[batch_idx]["labels"]
+            tgt_bboxes_cpu = targets[batch_idx]["boxes"]
 
-            if len(tgt_labels) == 0 or tgt_bboxes.max().item() == 0.:
+            if tgt_labels_cpu.numel() == 0 or tgt_bboxes_cpu.numel() == 0 or not torch.any(tgt_bboxes_cpu != 0):
                 num_anchors = sum([ab.shape[0] for ab in anchors])
                 obj_target = conf_preds.new_zeros((0,), dtype=torch.long)
                 act_target = conf_preds.new_zeros((0, self.num_actions))
@@ -286,6 +285,9 @@ class MultiTaskCriterion(object):
                 fg_mask = conf_preds.new_zeros(num_anchors).bool()
                 is_person_mask = conf_preds.new_zeros((0,)).bool()
             else:
+                tgt_labels = tgt_labels_cpu.to(device)
+                tgt_bboxes = tgt_bboxes_cpu.to(device)
+                tgt_bboxes_scaled = tgt_bboxes * self.img_size
                 (
                     gt_matched_classes,
                     fg_mask,
@@ -385,8 +387,9 @@ class MultiTaskCriterion(object):
             loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
             # Apply action class weights if available (upweights rare actions)
             if self.act_class_weights is not None:
-                act_weights = self.act_class_weights.to(device)
-                loss_act = loss_act * act_weights.unsqueeze(0)  # [N, C] * [1, C]
+                if self.act_class_weights.device != device:
+                    self.act_class_weights = self.act_class_weights.to(device)
+                loss_act = loss_act * self.act_class_weights.unsqueeze(0)  # [N, C] * [1, C]
             # CRITICAL FIX: Divide by PERSON fg count, not all fg
             # Action loss is only computed on person boxes, so normalization should match
             # Previously divided by num_fg (all boxes) which diluted the gradient by ~3x

@@ -4,11 +4,6 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-try:
-    import cv2
-    HAS_CV2 = True
-except ImportError:
-    HAS_CV2 = False
 import pickle
 import csv
 import json
@@ -150,28 +145,19 @@ class CharadesAGDataset(Dataset):
         else:
             ext, path_template = cached
         
-        # Load frames - use cv2 if available (2-3x faster), else PIL
+        # Load frames using PIL
         for i in range(self.len_clip):
             f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
             img_path = path_template % f_clamped
             
-            if HAS_CV2:
-                img = cv2.imread(img_path)
-                if img is None:
-                    img = cv2.imread(path_template % frame_idx)
-                if img is None:
-                    frame = Image.new('RGB', (self.img_size, self.img_size))
-                else:
-                    frame = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            else:
+            try:
+                frame = Image.open(img_path).convert('RGB')
+            except:
                 try:
-                    frame = Image.open(img_path).convert('RGB')
+                    frame = Image.open(path_template % frame_idx).convert('RGB')
                 except:
-                    try:
-                        frame = Image.open(path_template % frame_idx).convert('RGB')
-                    except:
-                        frame = Image.new('RGB', (self.img_size, self.img_size))
+                    frame = Image.new('RGB', (self.img_size, self.img_size))
             video_clip.append(frame)
             
         ow, oh = video_clip[-1].size

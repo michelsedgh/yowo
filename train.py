@@ -100,6 +100,8 @@ def parse_args():
                         help='Number of workers used in dataloading (8+ recommended for A100)')
     parser.add_argument('-size', '--img_size', default=None, type=int,
                         help='Override train/test image size (e.g., 320, 480, 640). If not set, uses dataset config default.')
+    parser.add_argument('--prefetch_factor', default=None, type=int,
+                        help='Override DataLoader prefetch factor. If not set, an adaptive value is used.')
 
     # Matcher
     parser.add_argument('--center_sampling_radius', default=2.5, type=float, 
@@ -136,6 +138,8 @@ def parse_args():
     # Mixed Precision Training
     parser.add_argument('--amp', action='store_true', default=False,
                         help='use Automatic Mixed Precision (AMP) for faster training and lower memory.')
+    parser.add_argument('--profile_iters', default=0, type=int,
+                        help='Profile the first N train iterations with detailed stage timing.')
 
     return parser.parse_args()
 
@@ -278,6 +282,19 @@ def train():
     else:
         scaler = None
 
+    profile_enabled = args.profile_iters > 0 and device.type == 'cuda'
+    if args.profile_iters > 0 and device.type != 'cuda':
+        print('Detailed train profiling requires CUDA. Skipping profiling.')
+    profile_stats = {
+        'data': 0.0,
+        'h2d': 0.0,
+        'forward': 0.0,
+        'loss': 0.0,
+        'reduce': 0.0,
+        'backward': 0.0,
+        'optim': 0.0,
+    }
+
 
 
     # eval before training
@@ -288,6 +305,7 @@ def train():
     # start to train
     training_start_time = time.time()  # Track total training time for ETA
     t0 = time.time()
+    last_iter_end = t0
     epoch_times = []  # Track epoch durations for ETA
     
     for epoch in range(start_epoch, max_epoch):
@@ -299,6 +317,9 @@ def train():
         # train one epoch
         for iter_i, (frame_ids, video_clips, targets) in enumerate(dataloader):
             ni = iter_i + epoch * epoch_size
+            do_profile = profile_enabled and iter_i < args.profile_iters
+            if do_profile:
+                profile_stats['data'] += time.time() - last_iter_end
 
             # warmup
             if ni < d_cfg['wp_iter'] and warmup:
@@ -310,22 +331,49 @@ def train():
                 warmup = False
                 warmup_scheduler.set_lr(optimizer, lr=base_lr, base_lr=base_lr)
 
-            # to device (non_blocking=True overlaps transfer with compute)
+            if do_profile:
+                torch.cuda.synchronize()
+                stage_t0 = time.time()
+
             video_clips = video_clips.to(device, non_blocking=True)
+            if video_clips.dtype == torch.uint8:
+                video_clips = video_clips.float().div_(255.0)
+            if do_profile:
+                torch.cuda.synchronize()
+                profile_stats['h2d'] += time.time() - stage_t0
 
             # inference and loss (with optional AMP)
+            if do_profile:
+                stage_t0 = time.time()
             if scaler is not None:
                 with autocast():
                     outputs = model(video_clips)
+            else:
+                outputs = model(video_clips)
+            if do_profile:
+                torch.cuda.synchronize()
+                profile_stats['forward'] += time.time() - stage_t0
+
+            if do_profile:
+                stage_t0 = time.time()
+            if scaler is not None:
+                with autocast():
                     loss_dict = criterion(outputs, targets)
                     losses = loss_dict['losses']
             else:
-                outputs = model(video_clips)
                 loss_dict = criterion(outputs, targets)
                 losses = loss_dict['losses']
+            if do_profile:
+                torch.cuda.synchronize()
+                profile_stats['loss'] += time.time() - stage_t0
 
             # reduce            
+            if do_profile:
+                stage_t0 = time.time()
             loss_dict_reduced = distributed_utils.reduce_dict(loss_dict)
+            if do_profile:
+                torch.cuda.synchronize()
+                profile_stats['reduce'] += time.time() - stage_t0
 
             # check loss
             if torch.isnan(losses):
@@ -334,10 +382,15 @@ def train():
 
             # Backward (with optional AMP scaling)
             losses = losses / accumulate
+            if do_profile:
+                stage_t0 = time.time()
             if scaler is not None:
                 scaler.scale(losses).backward()
             else:
                 losses.backward()
+            if do_profile:
+                torch.cuda.synchronize()
+                profile_stats['backward'] += time.time() - stage_t0
 
             # Cross-attention monitoring disabled (noisy, not useful for training progress)
 
@@ -345,6 +398,8 @@ def train():
             is_accumulate_step = (iter_i + 1) % accumulate == 0
             is_last_iter = (iter_i + 1) == epoch_size
             if is_accumulate_step or is_last_iter:
+                if do_profile:
+                    stage_t0 = time.time()
                 if scaler is not None:
                     scaler.unscale_(optimizer)
                     # Gradient clipping - REQUIRED to prevent NaN with AMP
@@ -356,6 +411,19 @@ def train():
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
                     optimizer.step()
                 optimizer.zero_grad()
+                if do_profile:
+                    torch.cuda.synchronize()
+                    profile_stats['optim'] += time.time() - stage_t0
+
+            if do_profile and (iter_i + 1) == args.profile_iters and distributed_utils.is_main_process():
+                total_profile = sum(profile_stats.values())
+                print('\n' + '=' * 70)
+                print(f'PROFILE OVER FIRST {args.profile_iters} ITERATIONS')
+                for key in ['data', 'h2d', 'forward', 'loss', 'reduce', 'backward', 'optim']:
+                    avg_ms = profile_stats[key] * 1000 / args.profile_iters
+                    pct = 100.0 * profile_stats[key] / max(total_profile, 1e-8)
+                    print(f'  {key:>8}: {avg_ms:7.1f} ms/iter ({pct:5.1f}%)')
+                print('=' * 70 + '\n')
                     
             # Display
             if distributed_utils.is_main_process() and iter_i % 10 == 0:
@@ -365,6 +433,9 @@ def train():
                           t1-t0, accumulate, training_start_time)
             
                 t0 = time.time()
+
+            if profile_enabled:
+                last_iter_end = time.time()
 
         lr_scheduler.step()
         

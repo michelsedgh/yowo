@@ -182,6 +182,22 @@ def build_dataset(d_cfg, args, is_train=False):
 
 
 def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False):
+    prefetch_factor = None
+    if args.num_workers > 0:
+        if getattr(args, 'prefetch_factor', None) is not None:
+            prefetch_factor = args.prefetch_factor
+        else:
+            img_size = getattr(dataset, 'img_size', None)
+            if img_size is None:
+                img_size = getattr(args, 'img_size', None) or 224
+            len_clip = getattr(dataset, 'len_clip', None)
+            if len_clip is None:
+                len_clip = getattr(args, 'len_clip', 16)
+
+            estimated_sample_mb = 3 * len_clip * img_size * img_size / (1024 ** 2)
+            estimated_inflight_gb = estimated_sample_mb * batch_size * args.num_workers * 2 / 1024
+            prefetch_factor = 1 if estimated_inflight_gb > 8.0 else 2
+
     if is_train:
         # distributed
         if args.distributed:
@@ -200,7 +216,7 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             num_workers=args.num_workers,
             pin_memory=True,
             persistent_workers=args.num_workers > 0,  # Keep workers alive between epochs
-            prefetch_factor=2 if args.num_workers > 0 else None
+            prefetch_factor=prefetch_factor
             )
     else:
         # test dataloader - optimized
@@ -212,9 +228,12 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             drop_last=False,
             pin_memory=True,
             persistent_workers=args.num_workers > 0,
-            prefetch_factor=2 if args.num_workers > 0 else None
+            prefetch_factor=prefetch_factor
             )
     
+    if args.num_workers > 0:
+        print(f'DataLoader workers={args.num_workers}, prefetch_factor={prefetch_factor}')
+
     return dataloader
     
 

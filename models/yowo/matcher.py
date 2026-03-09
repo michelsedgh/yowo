@@ -189,7 +189,7 @@ class SimOTA(object):
             matching_matrix[:, anchor_matching_gt > 1] *= 0
             matching_matrix[cost_argmin, anchor_matching_gt > 1] = 1
         fg_mask_inboxes = matching_matrix.sum(0) > 0
-        num_fg = fg_mask_inboxes.sum().item()
+        num_fg = fg_mask_inboxes.sum()
 
         fg_mask[fg_mask.clone()] = fg_mask_inboxes
 
