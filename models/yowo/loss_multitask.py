@@ -115,19 +115,19 @@ class MultiTaskCriterion(object):
         self.loss_reg_weight = args.loss_reg_weight
         self.use_focal_loss = use_focal_loss
         
-        # Loss functions
-        # Confidence loss: Focal Loss to prevent dominating other losses
-        # gamma=2.5 matches action/relation focal losses for aggressive hard example focus
-        # alpha=0.25 upweights rare foreground anchors (background vastly outnumbers fg)
-        self.conf_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.5, reduction='none')
-        print(f"  Using Focal Loss for confidence (gamma=2.5, alpha=0.25)")
+        # Confidence loss: BCE (NOT focal). Focal with high gamma causes conf to collapse
+        # because it stops penalizing background anchors predicting p=0.05-0.15, which
+        # pass the inference threshold (conf_thresh=0.05) and flood eval with false positives.
+        # BCE maintains strong gradient for ALL confidence levels.
+        self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
+        print(f"  Using BCE for confidence (stable gradient at all confidence levels)")
         
         # Object class weights - sqrt(max_count / class_count) from actual eval data
         # Recalculated from E5 export: person=13528, table=2050, chair=1540, etc.
         # Formula: sqrt(max_samples / class_samples), capped at 8.0
         # max_samples = 13528 (person)
         obj_class_weights = torch.tensor([
-            0.3,   # 0: person (13528 samples) - heavily downweight, dominates dataset
+            0.5,   # 0: person (13528 samples) - downweight but not starve (actions depend on person detection)
             6.98,  # 1: bag (278 samples)
             4.18,  # 2: bed (775 samples)
             5.29,  # 3: blanket (484 samples)
@@ -188,13 +188,16 @@ class MultiTaskCriterion(object):
         
         # Focal Loss for actions and relations (handles class imbalance)
         if use_focal_loss:
-            print("  Using Focal Loss (gamma=2.5, alpha=0.75) for actions and relations")
-            # gamma=2.5: AGGRESSIVE focus on hard examples - prevents lazy predictions
-            # The model was hedging bets (predicting ~0.4 for everything). gamma=2.5 forces
-            # it to commit: confident wrong predictions get heavily penalized.
-            # alpha=0.75 upweights positive samples (good for rare action classes)
-            self.act_lossf = SigmoidFocalLoss(alpha=0.75, gamma=2.5, reduction='none')
-            self.rel_lossf = SigmoidFocalLoss(alpha=0.75, gamma=2.5, reduction='none')
+            print("  Using Focal Loss (gamma=2.0, alpha=0.25) for actions and relations")
+            # alpha=0.25: strong negative suppression (neg gets 0.75 weight vs pos 0.25).
+            # With ~33 negatives per 2 positives per box, this keeps negatives firmly near 0.
+            # fixedrun? proved alpha=0.25 gives 4-8x pos/neg separation ratio.
+            # gamma=2.0: standard focal (paper default). Downweights already-learned common
+            # actions, redirecting gradient to unlearned rare ones. At p=0.7, focal_weight
+            # drops to 0.09 (9% gradient). Combined with class weights, this gives rare
+            # actions much more relative gradient than fixedrun?'s gamma=1.0 did.
+            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
+            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
         else:
             print("  Using standard BCE for actions and relations")
             self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
@@ -358,23 +361,6 @@ class MultiTaskCriterion(object):
                 self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none')
             loss_obj = self.obj_lossf(matched_obj_preds, obj_targets)
             loss_obj = loss_obj.sum() / num_fg
-            
-            # OBJECT MARGIN LOSS: Enforce GT logit > max(non-GT logits) + margin
-            # This is the softmax equivalent of gap loss for multi-label heads
-            # Aggressive values to ensure strong class separation
-            N = matched_obj_preds.shape[0]
-            gt_logits = matched_obj_preds[torch.arange(N, device=device), obj_targets]  # [N]
-            # Mask out GT class to find max non-GT logit
-            obj_mask = torch.ones_like(matched_obj_preds, dtype=torch.bool)
-            obj_mask[torch.arange(N, device=device), obj_targets] = False
-            non_gt_logits = matched_obj_preds.masked_fill(~obj_mask, float('-inf'))
-            max_non_gt = non_gt_logits.max(dim=1).values  # [N]
-            # margin=1.0 in logit space ≈ 2.7x probability ratio (e^1.0)
-            # weight=0.5 matches action gap loss weight for consistency
-            obj_margin = 1.0
-            obj_gap_violations = F.relu(obj_margin - (gt_logits - max_non_gt))  # [N]
-            obj_gap_loss = obj_gap_violations.mean()
-            loss_obj = loss_obj + 0.5 * obj_gap_loss
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
@@ -397,26 +383,29 @@ class MultiTaskCriterion(object):
                 num_person_fg = max(person_act_preds.shape[0], 1)
                 loss_act = loss_act.sum() / num_person_fg
                 
-                # GAP LOSS (vectorized): Enforce margin between positive and negative predictions
-                # Prevents "lazy model" predicting ~0.4 for everything
-                pred_probs = torch.sigmoid(person_act_preds)  # [N, C]
+                # PER-SAMPLE DECISIVENESS LOSS: the model must COMMIT to predictions.
+                # Positives must predict > 0.5 (logit > 0), negatives must predict < 0.1 (logit < -2.2).
+                # Operates in logit space for numerical stability and constant gradient.
+                # Strongest early in training when everything predicts ~0.5, naturally fades
+                # as model learns separation. Complements focal: focal pushes toward 0/1,
+                # this provides extra kick for predictions stuck in the uncertain middle.
                 pos_mask = person_act_targets > 0.5  # [N, C]
                 neg_mask = ~pos_mask
                 
-                # Per-class mean of predictions on positive vs negative samples
-                pos_sum = (pred_probs * pos_mask.float()).sum(0)   # [C]
-                pos_count = pos_mask.float().sum(0).clamp(min=1)   # [C]
-                neg_sum = (pred_probs * neg_mask.float()).sum(0)   # [C]
-                neg_count = neg_mask.float().sum(0).clamp(min=1)   # [C]
-                mean_pos = pos_sum / pos_count  # [C]
-                mean_neg = neg_sum / neg_count  # [C]
+                pos_logit_thresh = 0.0    # sigmoid(0) = 0.5
+                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1
                 
-                # Only penalize classes with both pos and neg in this batch
-                has_both = (pos_mask.any(0) & neg_mask.any(0))  # [C]
-                act_margin = 0.15
-                gap_violations = F.relu(act_margin - (mean_pos - mean_neg))  # [C]
-                gap_loss_act = (gap_violations * has_both.float()).mean()
-                loss_act = loss_act + 0.5 * gap_loss_act
+                pos_hinge = F.relu(pos_logit_thresh - person_act_preds) * pos_mask.float()
+                neg_hinge = F.relu(person_act_preds - neg_logit_thresh) * neg_mask.float()
+                
+                if self.act_class_weights is not None:
+                    pos_hinge = pos_hinge * self.act_class_weights.unsqueeze(0)
+                    neg_hinge = neg_hinge * self.act_class_weights.unsqueeze(0)
+                
+                # Normalize pos/neg separately so 33x more negatives don't dominate positives
+                act_gap_loss = (pos_hinge.sum() / pos_mask.float().sum().clamp(1) +
+                                neg_hinge.sum() / neg_mask.float().sum().clamp(1))
+                loss_act = loss_act + 1.0 * act_gap_loss
             else:
                 loss_act = torch.tensor(0.0, device=device)
         else:
@@ -428,23 +417,16 @@ class MultiTaskCriterion(object):
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
             loss_rel = loss_rel.sum() / num_fg
             
-            # GAP LOSS for relations (same lazy model problem)
-            rel_probs = torch.sigmoid(matched_rel_preds)  # [N, C]
+            # Per-sample decisiveness loss for relations (same design as actions)
             rel_pos_mask = rel_targets > 0.5
             rel_neg_mask = ~rel_pos_mask
             
-            rel_pos_sum = (rel_probs * rel_pos_mask.float()).sum(0)
-            rel_pos_count = rel_pos_mask.float().sum(0).clamp(min=1)
-            rel_neg_sum = (rel_probs * rel_neg_mask.float()).sum(0)
-            rel_neg_count = rel_neg_mask.float().sum(0).clamp(min=1)
-            rel_mean_pos = rel_pos_sum / rel_pos_count
-            rel_mean_neg = rel_neg_sum / rel_neg_count
+            rel_pos_hinge = F.relu(0.0 - matched_rel_preds) * rel_pos_mask.float()
+            rel_neg_hinge = F.relu(matched_rel_preds - (-2.2)) * rel_neg_mask.float()
             
-            rel_has_both = (rel_pos_mask.any(0) & rel_neg_mask.any(0))
-            rel_margin = 0.10  # Slightly lower margin for relations (already learning better)
-            rel_gap_violations = F.relu(rel_margin - (rel_mean_pos - rel_mean_neg))
-            gap_loss_rel = (rel_gap_violations * rel_has_both.float()).mean()
-            loss_rel = loss_rel + 0.3 * gap_loss_rel
+            rel_gap_loss = (rel_pos_hinge.sum() / rel_pos_mask.float().sum().clamp(1) +
+                            rel_neg_hinge.sum() / rel_neg_mask.float().sum().clamp(1))
+            loss_rel = loss_rel + 0.5 * rel_gap_loss
         else:
             loss_rel = torch.tensor(0.0, device=device)
 
@@ -456,8 +438,12 @@ class MultiTaskCriterion(object):
         else:
             loss_box = torch.tensor(0.0, device=device)
 
-        # Total
-        loss_cls = loss_obj + loss_act + loss_rel
+        # Priority weighting: actions (primary task) > objects (person detection) > relations (context)
+        # Default equal weighting gave act only 23% of cls gradient. Now:
+        #   act: 2.0 * ~14 = ~28  (44%)  ← primary task, gets strongest backbone signal
+        #   obj: 1.0 * ~23 = ~23  (36%)  ← person detection is critical path for actions
+        #   rel: 0.5 * ~25 = ~12  (20%)  ← spatial context still useful, but not dominant
+        loss_cls = loss_obj + 2.0 * loss_act + 0.5 * loss_rel
         losses = (
             self.loss_conf_weight * loss_conf +
             self.loss_cls_weight * loss_cls +
