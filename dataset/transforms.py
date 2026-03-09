@@ -4,6 +4,12 @@ import torch
 import torchvision.transforms.functional as F
 from PIL import Image
 
+try:
+    import cv2
+    _HAS_CV2 = True
+except ImportError:
+    _HAS_CV2 = False
+
 
 # Augmentation for Training
 class Augmentation(object):
@@ -24,22 +30,39 @@ class Augmentation(object):
         return 1./scale
 
 
-    def random_distort_image(self, video_clip):
-        """Color distortion using PIL HSV. Applied 50% of the time for speed."""
-        # Skip 50% of the time - major speedup, still provides augmentation benefit
-        if random.random() > 0.5:
-            return video_clip
-            
+    def _distort_cv2(self, video_clip_np):
+        """Color distortion using cv2 HSV. Takes/returns list of RGB numpy arrays."""
         dhue = random.uniform(-self.hue, self.hue)
         dsat = self.rand_scale(self.saturation)
         dexp = self.rand_scale(self.exposure)
-        
-        # Pre-compute lookup tables for speed (avoid lambda per-pixel)
+
+        hue_shift = int(dhue * 180)
+        h_lut = np.array([(i + hue_shift) % 180 for i in range(180)], dtype=np.uint8)
+        h_lut = np.pad(h_lut, (0, 76))
+        s_lut = np.clip(np.arange(256, dtype=np.float32) * dsat, 0, 255).astype(np.uint8)
+        v_lut = np.clip(np.arange(256, dtype=np.float32) * dexp, 0, 255).astype(np.uint8)
+
+        result = []
+        for img in video_clip_np:
+            hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            hsv[:, :, 0] = cv2.LUT(hsv[:, :, 0], h_lut)
+            hsv[:, :, 1] = cv2.LUT(hsv[:, :, 1], s_lut)
+            hsv[:, :, 2] = cv2.LUT(hsv[:, :, 2], v_lut)
+            result.append(cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB))
+
+        return result
+
+    def _distort_pil(self, video_clip):
+        """Color distortion using PIL HSV. Fallback when cv2 unavailable."""
+        dhue = random.uniform(-self.hue, self.hue)
+        dsat = self.rand_scale(self.saturation)
+        dexp = self.rand_scale(self.exposure)
+
         sat_lut = bytes([max(0, min(255, int(i * dsat))) for i in range(256)])
         exp_lut = bytes([max(0, min(255, int(i * dexp))) for i in range(256)])
         hue_shift = int(dhue * 255)
         hue_lut = bytes([(i + hue_shift) % 256 for i in range(256)])
-        
+
         video_clip_ = []
         for image in video_clip:
             image = image.convert('HSV')
@@ -53,40 +76,69 @@ class Augmentation(object):
 
         return video_clip_
 
+    def _crop_numpy(self, frames, pleft, ptop, crop_w, crop_h):
+        """Numpy crop matching PIL Image.crop zero-fill for out-of-bounds regions."""
+        if crop_h <= 0 or crop_w <= 0:
+            return [np.zeros((max(1, crop_h), max(1, crop_w), 3), dtype=frames[0].dtype)
+                    for _ in frames]
+
+        h, w = frames[0].shape[:2]
+
+        if pleft >= 0 and ptop >= 0 and pleft + crop_w <= w and ptop + crop_h <= h:
+            return [f[ptop:ptop+crop_h, pleft:pleft+crop_w].copy() for f in frames]
+
+        src_t, src_l = max(0, ptop), max(0, pleft)
+        src_b, src_r = min(h, ptop + crop_h), min(w, pleft + crop_w)
+        dst_t, dst_l = src_t - ptop, src_l - pleft
+        ch, cw = src_b - src_t, src_r - src_l
+
+        result = []
+        for f in frames:
+            out = np.zeros((crop_h, crop_w, 3), dtype=f.dtype)
+            if ch > 0 and cw > 0:
+                out[dst_t:dst_t+ch, dst_l:dst_l+cw] = f[src_t:src_b, src_l:src_r]
+            result.append(out)
+        return result
+
 
     def random_crop(self, video_clip, width, height):
-        dw =int(width * self.jitter)
-        dh =int(height * self.jitter)
+        dw = int(width * self.jitter)
+        dh = int(height * self.jitter)
 
         pleft  = random.randint(-dw, dw)
         pright = random.randint(-dw, dw)
         ptop   = random.randint(-dh, dh)
         pbot   = random.randint(-dh, dh)
 
-        swidth =  width - pleft - pright
+        swidth  = width - pleft - pright
         sheight = height - ptop - pbot
 
         sx = float(swidth)  / width
         sy = float(sheight) / height
-        
-        dx = (float(pleft) / width)/sx
-        dy = (float(ptop) / height)/sy
 
-        # random crop
-        cropped_clip = [img.crop((pleft, ptop, pleft + swidth - 1, ptop + sheight - 1)) for img in video_clip]
+        dx = (float(pleft) / width) / sx
+        dy = (float(ptop) / height) / sy
 
-        return cropped_clip, dx, dy, sx, sy
+        # PIL crop uses exclusive right/bottom, original code passes swidth-1/sheight-1
+        crop_w = swidth - 1
+        crop_h = sheight - 1
+
+        if isinstance(video_clip[0], np.ndarray):
+            cropped = self._crop_numpy(video_clip, pleft, ptop, crop_w, crop_h)
+        else:
+            cropped = [img.crop((pleft, ptop, pleft + crop_w, ptop + crop_h))
+                       for img in video_clip]
+
+        return cropped, dx, dy, sx, sy
 
 
     def apply_bbox(self, target, ow, oh, dx, dy, sx, sy):
         sx, sy = 1./sx, 1./sy
-        # apply deltas on bbox
         target[..., 0] = np.minimum(0.999, np.maximum(0, target[..., 0] / ow * sx - dx)) 
         target[..., 1] = np.minimum(0.999, np.maximum(0, target[..., 1] / oh * sy - dy)) 
         target[..., 2] = np.minimum(0.999, np.maximum(0, target[..., 2] / ow * sx - dx)) 
         target[..., 3] = np.minimum(0.999, np.maximum(0, target[..., 3] / oh * sy - dy)) 
 
-        # refine target
         refine_target = []
         for i in range(target.shape[0]):
             tgt = target[i]
@@ -101,75 +153,76 @@ class Augmentation(object):
         refine_target = np.array(refine_target).reshape(-1, target.shape[-1])
 
         return refine_target
-        
-
-    def to_tensor(self, video_clip):
-        return [F.pil_to_tensor(image) for image in video_clip]
 
 
     def __call__(self, video_clip, target):
-        # Initialize Random Variables
-        oh = video_clip[0].height  
-        ow = video_clip[0].width
-        
-        # random crop
+        if isinstance(video_clip[0], np.ndarray):
+            oh, ow = video_clip[0].shape[:2]
+        else:
+            oh = video_clip[0].height
+            ow = video_clip[0].width
+
         video_clip, dx, dy, sx, sy = self.random_crop(video_clip, ow, oh)
 
-        # resize (BILINEAR is default - explicit for clarity)
-        video_clip = [img.resize([self.img_size, self.img_size], Image.BILINEAR) for img in video_clip]
-
-        # random flip
         flip = random.randint(0, 1)
-        if flip:
-            video_clip = [img.transpose(Image.FLIP_LEFT_RIGHT) for img in video_clip]
 
-        # distort
-        video_clip = self.random_distort_image(video_clip)
+        if isinstance(video_clip[0], np.ndarray):
+            video_clip = [cv2.resize(f, (self.img_size, self.img_size),
+                          interpolation=cv2.INTER_LINEAR) for f in video_clip]
+            if flip:
+                video_clip = [cv2.flip(f, 1) for f in video_clip]
+            video_clip = self._distort_cv2(video_clip)
+            clip = np.stack(video_clip)                                     # [T, H, W, C]
+            video_clip = torch.from_numpy(
+                np.ascontiguousarray(clip.transpose(3, 0, 1, 2)))          # [C, T, H, W]
+        else:
+            video_clip = [img.resize([self.img_size, self.img_size], Image.BILINEAR)
+                         for img in video_clip]
+            if flip:
+                video_clip = [img.transpose(Image.FLIP_LEFT_RIGHT) for img in video_clip]
+            video_clip = self._distort_pil(video_clip)
+            video_clip = [F.pil_to_tensor(image) for image in video_clip]
 
-        # process target
         if target is not None:
             target = self.apply_bbox(target, ow, oh, dx, dy, sx, sy)
             if flip:
                 target[..., [0, 2]] = 1.0 - target[..., [2, 0]]
         else:
             target = np.array([])
-            
-        # to tensor
-        video_clip = self.to_tensor(video_clip)
+
         target = torch.as_tensor(target).float()
 
-        return video_clip, target 
+        return video_clip, target
 
 
 # Transform for Testing
 class BaseTransform(object):
-    def __init__(self, img_size=224, ):
+    def __init__(self, img_size=224):
         self.img_size = img_size
 
 
-    def to_tensor(self, video_clip):
-        return [F.to_tensor(image) for image in video_clip]
-
-
     def __call__(self, video_clip, target=None, normalize=True):
-        oh = video_clip[0].height
-        ow = video_clip[0].width
+        if isinstance(video_clip[0], np.ndarray):
+            oh, ow = video_clip[0].shape[:2]
+            video_clip = [cv2.resize(f, (self.img_size, self.img_size),
+                         interpolation=cv2.INTER_LINEAR) for f in video_clip]
+            clip = np.stack(video_clip)                                     # [T, H, W, C]
+            video_clip = torch.from_numpy(
+                np.ascontiguousarray(clip.transpose(3, 0, 1, 2))
+            ).float().div_(255.0)                                           # [C, T, H, W]
+        else:
+            oh = video_clip[0].height
+            ow = video_clip[0].width
+            video_clip = [img.resize([self.img_size, self.img_size]) for img in video_clip]
+            video_clip = [F.to_tensor(image) for image in video_clip]
 
-        # resize
-        video_clip = [img.resize([self.img_size, self.img_size]) for img in video_clip]
-
-        # normalize target
         if target is not None:
             if normalize:
                 target[..., [0, 2]] /= ow
                 target[..., [1, 3]] /= oh
-
         else:
             target = np.array([])
 
-        # to tensor
-        video_clip = self.to_tensor(video_clip)
         target = torch.as_tensor(target).float()
 
-        return video_clip, target 
-
+        return video_clip, target

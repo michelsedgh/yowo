@@ -61,7 +61,7 @@ class SimOTA(object):
                 cls_preds_.float().unsqueeze(0).repeat(num_gt, 1, 1).sigmoid_()
                 * conf_preds_.float().unsqueeze(0).repeat(num_gt, 1, 1).sigmoid_()
             ) # [N, Mp, C]
-            # Clamp to valid BCE range - required for AMP stability
+            score_preds_ = torch.nan_to_num(score_preds_, nan=0.5, posinf=1.0, neginf=0.0)
             score_preds_ = score_preds_.clamp(min=1e-7, max=1.0 - 1e-7)
             pair_wise_cls_loss = F.binary_cross_entropy(
                 score_preds_, gt_cls, reduction="none"

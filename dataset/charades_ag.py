@@ -8,6 +8,12 @@ import pickle
 import csv
 import json
 
+try:
+    import cv2
+    _HAS_CV2 = True
+except ImportError:
+    _HAS_CV2 = False
+
 class CharadesAGDataset(Dataset):
     def __init__(self, cfg, data_root, is_train=False, img_size=224, transform=None, len_clip=16, sampling_rate=1):
         self.data_root = data_root
@@ -97,7 +103,7 @@ class CharadesAGDataset(Dataset):
             kf for kf in self.person_bboxes.keys() 
             if kf.split('/')[0].replace('.mp4', '') in split_video_ids
         ])
-        print(f"Loaded {len(self.keyframes)} keyframes for {'train' if self.is_train else 'val'}")
+        print(f"Loaded {len(self.keyframes)} keyframes for {'train' if self.is_train else 'val'} (frame loader: {'cv2' if _HAS_CV2 else 'PIL'})")
 
     def __len__(self):
         return len(self.keyframes)
@@ -145,22 +151,38 @@ class CharadesAGDataset(Dataset):
         else:
             ext, path_template = cached
         
-        # Load frames using PIL
         for i in range(self.len_clip):
             f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
             img_path = path_template % f_clamped
             
-            try:
-                frame = Image.open(img_path).convert('RGB')
-            except:
+            frame = None
+            if _HAS_CV2:
+                img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                if img is None:
+                    img = cv2.imread(path_template % frame_idx, cv2.IMREAD_COLOR)
+                if img is not None:
+                    frame = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            else:
                 try:
-                    frame = Image.open(path_template % frame_idx).convert('RGB')
-                except:
+                    frame = Image.open(img_path).convert('RGB')
+                except (IOError, OSError):
+                    try:
+                        frame = Image.open(path_template % frame_idx).convert('RGB')
+                    except (IOError, OSError):
+                        pass
+
+            if frame is None:
+                if _HAS_CV2:
+                    frame = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
+                else:
                     frame = Image.new('RGB', (self.img_size, self.img_size))
             video_clip.append(frame)
             
-        ow, oh = video_clip[-1].size
+        if isinstance(video_clip[-1], np.ndarray):
+            oh, ow = video_clip[-1].shape[:2]
+        else:
+            ow, oh = video_clip[-1].size
         
         # 2. Build Targets
         boxes = []
@@ -245,8 +267,10 @@ class CharadesAGDataset(Dataset):
         if self.transform is not None:
             video_clip, target = self.transform(video_clip, target)
         
-        # List [T, 3, H, W] -> [3, T, H, W]
-        video_clip = torch.stack(video_clip, dim=1)
+        if not isinstance(video_clip, torch.Tensor):
+            # PIL path: list of [C, H, W] tensors -> stack to [C, T, H, W]
+            video_clip = torch.stack(video_clip, dim=1)
+        # Numpy path: transform already returned contiguous [C, T, H, W]
         
         # reformat target to dict after transform
         if target.shape[0] > 0:
