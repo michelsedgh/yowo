@@ -4,6 +4,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    HAS_CV2 = False
 import pickle
 import csv
 import json
@@ -32,6 +37,10 @@ class CharadesAGDataset(Dataset):
         self.num_relations = len(self.ag_relations) # 26
         
         self.num_classes = self.num_objects + self.num_actions + self.num_relations # 36 + 157 + 26 = 219
+        
+        # PERF: Build lookup dicts for O(1) instead of O(n) list.index() calls
+        self._obj_to_idx = {name: i for i, name in enumerate(self.ag_objects)}
+        self._rel_to_idx = {self._normalize_rel_static(name): i for i, name in enumerate(self.ag_relations)}
         
         # 2. Load Annotations
         self._load_data()
@@ -98,6 +107,11 @@ class CharadesAGDataset(Dataset):
     def __len__(self):
         return len(self.keyframes)
 
+    @staticmethod
+    def _normalize_rel_static(rel):
+        """Static version for use in __init__ before self is ready."""
+        return rel.replace('_', '').lower()
+    
     def _normalize_rel(self, rel):
         return rel.replace('_', '').lower()
 
@@ -120,31 +134,44 @@ class CharadesAGDataset(Dataset):
         video_clip = []
         frames_dir = os.path.join(self.data_root, 'frames', video_id_full)
         
-        # Cache the frame extension for this video (avoid repeated try/except)
+        # Cache the frame extension and base path for this video
         if not hasattr(self, '_frame_ext_cache'):
             self._frame_ext_cache = {}
         
-        ext = self._frame_ext_cache.get(video_id_full)
-        if ext is None:
+        cache_key = video_id_full
+        cached = self._frame_ext_cache.get(cache_key)
+        if cached is None:
             # Determine extension once per video
             test_path_jpg = os.path.join(frames_dir, f"{frame_idx:06d}.jpg")
             ext = 'jpg' if os.path.exists(test_path_jpg) else 'png'
-            self._frame_ext_cache[video_id_full] = ext
+            # Precompute path template: frames_dir + "/%06d." + ext
+            path_template = os.path.join(frames_dir, "%06d." + ext)
+            self._frame_ext_cache[cache_key] = (ext, path_template)
+        else:
+            ext, path_template = cached
         
+        # Load frames - use cv2 if available (2-3x faster), else PIL
         for i in range(self.len_clip):
             f = frame_idx - (self.len_clip - 1 - i) * d
             f_clamped = max(1, f)
+            img_path = path_template % f_clamped
             
-            img_path = os.path.join(frames_dir, f"{f_clamped:06d}.{ext}")
-            try:
-                frame = Image.open(img_path).convert('RGB')
-            except:
-                # Fallback to keyframe
-                img_path = os.path.join(frames_dir, f"{frame_idx:06d}.{ext}")
+            if HAS_CV2:
+                img = cv2.imread(img_path)
+                if img is None:
+                    img = cv2.imread(path_template % frame_idx)
+                if img is None:
+                    frame = Image.new('RGB', (self.img_size, self.img_size))
+                else:
+                    frame = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            else:
                 try:
                     frame = Image.open(img_path).convert('RGB')
                 except:
-                    frame = Image.new('RGB', (self.img_size, self.img_size))
+                    try:
+                        frame = Image.open(path_template % frame_idx).convert('RGB')
+                    except:
+                        frame = Image.new('RGB', (self.img_size, self.img_size))
             video_clip.append(frame)
             
         ow, oh = video_clip[-1].size
@@ -181,16 +208,13 @@ class CharadesAGDataset(Dataset):
                     # Indices 36-192 for actions
                     label[self.num_objects + cls_idx] = 1.0
             
-            # 3. Relationships: Union of all interactions
+            # 3. Relationships: Union of all interactions (O(1) lookup)
             for obj in obj_info_list:
                 for r_type in ['attention_relationship', 'spatial_relationship', 'contacting_relationship']:
-                    rel_list = obj.get(r_type, [])
-                    if rel_list is None:
-                        rel_list = []
+                    rel_list = obj.get(r_type) or []
                     for r in rel_list:
-                        r_norm = self._normalize_rel(r)
-                        if r_norm in self.ag_relations:
-                            r_idx = self.ag_relations.index(r_norm)
+                        r_idx = self._rel_to_idx.get(self._normalize_rel(r))
+                        if r_idx is not None:
                             # Indices 193-218 for relations
                             label[self.num_objects + self.num_actions + r_idx] = 1.0
             labels.append(label)
@@ -204,22 +228,19 @@ class CharadesAGDataset(Dataset):
             o_bbox = np.array([ox * sx, oy * sy, (ox + ow_obj) * sx, (oy + oh_obj) * sy])
             boxes.append(o_bbox)
             
-            # Label
+            # Label (O(1) lookups)
             label = np.zeros(self.num_classes, dtype=np.float32)
             # 1. Object class
-            obj_name = obj['class'].lower()
-            if obj_name in self.ag_objects:
-                label[self.ag_objects.index(obj_name)] = 1.0
+            obj_idx = self._obj_to_idx.get(obj['class'].lower())
+            if obj_idx is not None:
+                label[obj_idx] = 1.0
             
             # 2. Relationships specific to this object
             for r_type in ['attention_relationship', 'spatial_relationship', 'contacting_relationship']:
-                rel_list = obj.get(r_type, [])
-                if rel_list is None:
-                    rel_list = []
+                rel_list = obj.get(r_type) or []
                 for r in rel_list:
-                    r_norm = self._normalize_rel(r)
-                    if r_norm in self.ag_relations:
-                        r_idx = self.ag_relations.index(r_norm)
+                    r_idx = self._rel_to_idx.get(self._normalize_rel(r))
+                    if r_idx is not None:
                         label[self.num_objects + self.num_actions + r_idx] = 1.0
             labels.append(label)
 
