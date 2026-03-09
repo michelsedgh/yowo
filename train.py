@@ -10,7 +10,6 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.cuda.amp import autocast, GradScaler
 
 from utils import distributed_utils
 from utils.com_flops_params import FLOPs_and_Params
@@ -166,6 +165,11 @@ def train():
         print('use cuda')
         cudnn.benchmark = True
         device = torch.device("cuda")
+        if torch.cuda.get_device_capability(0)[0] >= 8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            if hasattr(torch, 'set_float32_matmul_precision'):
+                torch.set_float32_matmul_precision('high')
     else:
         device = torch.device("cpu")
 
@@ -278,7 +282,7 @@ def train():
     # Mixed Precision Training (AMP)
     if args.amp:
         print('Using Automatic Mixed Precision (AMP) training')
-        scaler = GradScaler()
+        scaler = torch.amp.GradScaler('cuda')
     else:
         scaler = None
 
@@ -346,7 +350,7 @@ def train():
             if do_profile:
                 stage_t0 = time.time()
             if scaler is not None:
-                with autocast():
+                with torch.amp.autocast(device_type='cuda'):
                     outputs = model(video_clips)
             else:
                 outputs = model(video_clips)
@@ -357,7 +361,7 @@ def train():
             if do_profile:
                 stage_t0 = time.time()
             if scaler is not None:
-                with autocast():
+                with torch.amp.autocast(device_type='cuda'):
                     loss_dict = criterion(outputs, targets)
                     losses = loss_dict['losses']
             else:
@@ -410,7 +414,7 @@ def train():
                     # Gradient clipping - prevents training explosion
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
                     optimizer.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 if do_profile:
                     torch.cuda.synchronize()
                     profile_stats['optim'] += time.time() - stage_t0

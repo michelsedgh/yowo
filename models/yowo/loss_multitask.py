@@ -381,41 +381,44 @@ class MultiTaskCriterion(object):
         # Action loss (Focal/BCE - multi-label, PERSON-ONLY)
         # Uses class weights to upweight rare actions (e.g., "awakening" 2.18x)
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
-        if len(act_targets) > 0 and is_person_masks.sum() > 0:
+        if len(act_targets) > 0:
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
-            loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
-            # Apply action class weights if available (upweights rare actions)
-            if self.act_class_weights is not None:
-                if self.act_class_weights.device != device:
-                    self.act_class_weights = self.act_class_weights.to(device)
-                loss_act = loss_act * self.act_class_weights.unsqueeze(0)  # [N, C] * [1, C]
-            # CRITICAL FIX: Divide by PERSON fg count, not all fg
-            # Action loss is only computed on person boxes, so normalization should match
-            # Previously divided by num_fg (all boxes) which diluted the gradient by ~3x
-            num_person_fg = max(is_person_masks.sum().float(), 1.0)
-            loss_act = loss_act.sum() / num_person_fg
-            
-            # GAP LOSS (vectorized): Enforce margin between positive and negative predictions
-            # Prevents "lazy model" predicting ~0.4 for everything
-            pred_probs = torch.sigmoid(person_act_preds)  # [N, C]
-            pos_mask = person_act_targets > 0.5  # [N, C]
-            neg_mask = ~pos_mask
-            
-            # Per-class mean of predictions on positive vs negative samples
-            pos_sum = (pred_probs * pos_mask.float()).sum(0)   # [C]
-            pos_count = pos_mask.float().sum(0).clamp(min=1)   # [C]
-            neg_sum = (pred_probs * neg_mask.float()).sum(0)   # [C]
-            neg_count = neg_mask.float().sum(0).clamp(min=1)   # [C]
-            mean_pos = pos_sum / pos_count  # [C]
-            mean_neg = neg_sum / neg_count  # [C]
-            
-            # Only penalize classes with both pos and neg in this batch
-            has_both = (pos_mask.any(0) & neg_mask.any(0))  # [C]
-            act_margin = 0.15
-            gap_violations = F.relu(act_margin - (mean_pos - mean_neg))  # [C]
-            gap_loss_act = (gap_violations * has_both.float()).mean()
-            loss_act = loss_act + 0.5 * gap_loss_act
+            if person_act_preds.shape[0] > 0:
+                loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
+                # Apply action class weights if available (upweights rare actions)
+                if self.act_class_weights is not None:
+                    if self.act_class_weights.device != device:
+                        self.act_class_weights = self.act_class_weights.to(device)
+                    loss_act = loss_act * self.act_class_weights.unsqueeze(0)  # [N, C] * [1, C]
+                # CRITICAL FIX: Divide by PERSON fg count, not all fg
+                # Action loss is only computed on person boxes, so normalization should match
+                # Previously divided by num_fg (all boxes) which diluted the gradient by ~3x
+                num_person_fg = max(person_act_preds.shape[0], 1)
+                loss_act = loss_act.sum() / num_person_fg
+                
+                # GAP LOSS (vectorized): Enforce margin between positive and negative predictions
+                # Prevents "lazy model" predicting ~0.4 for everything
+                pred_probs = torch.sigmoid(person_act_preds)  # [N, C]
+                pos_mask = person_act_targets > 0.5  # [N, C]
+                neg_mask = ~pos_mask
+                
+                # Per-class mean of predictions on positive vs negative samples
+                pos_sum = (pred_probs * pos_mask.float()).sum(0)   # [C]
+                pos_count = pos_mask.float().sum(0).clamp(min=1)   # [C]
+                neg_sum = (pred_probs * neg_mask.float()).sum(0)   # [C]
+                neg_count = neg_mask.float().sum(0).clamp(min=1)   # [C]
+                mean_pos = pos_sum / pos_count  # [C]
+                mean_neg = neg_sum / neg_count  # [C]
+                
+                # Only penalize classes with both pos and neg in this batch
+                has_both = (pos_mask.any(0) & neg_mask.any(0))  # [C]
+                act_margin = 0.15
+                gap_violations = F.relu(act_margin - (mean_pos - mean_neg))  # [C]
+                gap_loss_act = (gap_violations * has_both.float()).mean()
+                loss_act = loss_act + 0.5 * gap_loss_act
+            else:
+                loss_act = torch.tensor(0.0, device=device)
         else:
             loss_act = torch.tensor(0.0, device=device)
 
