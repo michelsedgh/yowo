@@ -289,6 +289,7 @@ def train():
     profile_enabled = args.profile_iters > 0 and device.type == 'cuda'
     if args.profile_iters > 0 and device.type != 'cuda':
         print('Detailed train profiling requires CUDA. Skipping profiling.')
+    profile_interval = 1000
     profile_stats = {
         'data': 0.0,
         'h2d': 0.0,
@@ -298,6 +299,7 @@ def train():
         'backward': 0.0,
         'optim': 0.0,
     }
+    profile_count = 0
 
 
 
@@ -321,7 +323,7 @@ def train():
         # train one epoch
         for iter_i, (frame_ids, video_clips, targets) in enumerate(dataloader):
             ni = iter_i + epoch * epoch_size
-            do_profile = profile_enabled and iter_i < args.profile_iters
+            do_profile = profile_enabled and (iter_i % profile_interval) < args.profile_iters
             if do_profile:
                 profile_stats['data'] += time.time() - last_iter_end
 
@@ -419,15 +421,20 @@ def train():
                     torch.cuda.synchronize()
                     profile_stats['optim'] += time.time() - stage_t0
 
-            if do_profile and (iter_i + 1) == args.profile_iters and distributed_utils.is_main_process():
+            if do_profile:
+                profile_count += 1
+            if profile_enabled and profile_count == args.profile_iters and distributed_utils.is_main_process():
                 total_profile = sum(profile_stats.values())
                 print('\n' + '=' * 70)
-                print(f'PROFILE OVER FIRST {args.profile_iters} ITERATIONS')
+                print(f'PROFILE @ iter {iter_i+1} (last {args.profile_iters} iters)')
                 for key in ['data', 'h2d', 'forward', 'loss', 'reduce', 'backward', 'optim']:
                     avg_ms = profile_stats[key] * 1000 / args.profile_iters
                     pct = 100.0 * profile_stats[key] / max(total_profile, 1e-8)
                     print(f'  {key:>8}: {avg_ms:7.1f} ms/iter ({pct:5.1f}%)')
                 print('=' * 70 + '\n')
+                for k in profile_stats:
+                    profile_stats[k] = 0.0
+                profile_count = 0
                     
             # Display
             if distributed_utils.is_main_process() and iter_i % 10 == 0:

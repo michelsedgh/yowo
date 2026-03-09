@@ -90,13 +90,17 @@ class ReadableEvaluator:
         model.eval()
         device = next(model.parameters()).device
         
+        num_workers = 8
         testloader = torch.utils.data.DataLoader(
             dataset=self.testset,
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=self.collate_fn,
-            num_workers=2,
-            drop_last=False
+            num_workers=num_workers,
+            drop_last=False,
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            prefetch_factor=4 if num_workers > 0 else None
         )
         
         # Metrics storage
@@ -130,7 +134,7 @@ class ReadableEvaluator:
             if max_samples and iter_i >= eval_size:
                 break
             
-            batch_video_clip = batch_video_clip.to(device)
+            batch_video_clip = batch_video_clip.to(device, non_blocking=True)
             
             with torch.no_grad():
                 batch_outputs = model(batch_video_clip)

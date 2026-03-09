@@ -84,19 +84,19 @@ class SmartHomeEvaluatorV2:
         print(f"  Test keyframes: {len(self.testset)}")
         print(f"  Objects: {self.num_objects}, Actions: {self.num_actions}, Relations: {self.num_relations}")
     
-    def _compute_iou(self, box1, box2):
-        """Compute IoU between two boxes [x1, y1, x2, y2]."""
-        x1 = max(box1[0], box2[0])
-        y1 = max(box1[1], box2[1])
-        x2 = min(box1[2], box2[2])
-        y2 = min(box1[3], box2[3])
+    def _compute_iou_matrix(self, boxes1, boxes2):
+        """Vectorized IoU: [N,4] x [M,4] -> [N,M] matrix."""
+        x1 = np.maximum(boxes1[:, 0:1], boxes2[:, 0:1].T)
+        y1 = np.maximum(boxes1[:, 1:2], boxes2[:, 1:2].T)
+        x2 = np.minimum(boxes1[:, 2:3], boxes2[:, 2:3].T)
+        y2 = np.minimum(boxes1[:, 3:4], boxes2[:, 3:4].T)
         
-        inter_area = max(0, x2 - x1) * max(0, y2 - y1)
-        box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
-        box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
-        union_area = box1_area + box2_area - inter_area
+        inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+        area1 = (boxes1[:, 2] - boxes1[:, 0]) * (boxes1[:, 3] - boxes1[:, 1])
+        area2 = (boxes2[:, 2] - boxes2[:, 0]) * (boxes2[:, 3] - boxes2[:, 1])
+        union = area1[:, None] + area2[None, :] - inter
         
-        return inter_area / union_area if union_area > 0 else 0.0
+        return inter / np.maximum(union, 1e-6)
 
     @torch.no_grad()
     def evaluate_frame_map(self, model, epoch=1, max_samples=None):
@@ -104,13 +104,17 @@ class SmartHomeEvaluatorV2:
         model.eval()
         device = model.device
         
+        num_workers = 8
         dataloader = torch.utils.data.DataLoader(
             self.testset,
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=self.collate_fn,
-            num_workers=4,
-            drop_last=False
+            num_workers=num_workers,
+            drop_last=False,
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            prefetch_factor=4 if num_workers > 0 else None
         )
         
         print(f"\n{'='*70}")
@@ -138,7 +142,7 @@ class SmartHomeEvaluatorV2:
         start_time = time.time()
         
         for batch_idx, (frame_ids, video_clips, targets) in enumerate(dataloader):
-            video_clips = video_clips.to(device)
+            video_clips = video_clips.to(device, non_blocking=True)
             batch_bboxes = model(video_clips)
             
             for i in range(len(batch_bboxes)):
@@ -181,66 +185,47 @@ class SmartHomeEvaluatorV2:
                 person_det_mask = det_obj_probs.argmax(axis=1) == 0
                 total_person_det += person_det_mask.sum()
                 
-                gt_matched = [False] * len(gt_boxes)
                 conf_order = np.argsort(-det_confs)
                 
-                # CLASS-AWARE MATCHING: person dets → person GTs, object dets → object GTs
-                # Without this, high-confidence object detections (table, door) that overlap
-                # with person boxes steal the person GT match. Since objects have ~zero action
-                # predictions, this makes action metrics look terrible even when the model
-                # has actually learned actions well at person anchors.
-                det_is_person = det_obj_probs.argmax(axis=1) == 0  # detection classified as person?
-                gt_is_person = gt_labels[:, 0] > 0.5  # GT is person?
+                # Class-aware matching: person dets -> person GTs, object dets -> object GTs
+                det_is_person = det_obj_probs.argmax(axis=1) == 0
+                gt_is_person = gt_labels[:, 0] > 0.5
+                
+                # Vectorized IoU matrix [num_det, num_gt] + class mask
+                iou_matrix = self._compute_iou_matrix(det_boxes_scaled, gt_boxes_scaled)
+                class_mask = det_is_person[:, None] == gt_is_person[None, :]
+                iou_matrix_masked = iou_matrix * class_mask
+                
+                gt_matched = np.zeros(len(gt_boxes), dtype=bool)
                 
                 for det_idx in conf_order:
-                    det_box = det_boxes_scaled[det_idx]
-                    det_label = det_labels[det_idx]
-                    det_person = det_is_person[det_idx]
+                    ious = iou_matrix_masked[det_idx].copy()
+                    ious[gt_matched] = 0.0
                     
-                    best_iou = 0
-                    best_gt_idx = -1
-                    
-                    for gt_idx, gt_box in enumerate(gt_boxes_scaled):
-                        if gt_matched[gt_idx]:
-                            continue
-                        # Class-aware: person dets match person GTs, object dets match object GTs
-                        if det_person != gt_is_person[gt_idx]:
-                            continue
-                        iou = self._compute_iou(det_box, gt_box)
-                        if iou > best_iou:
-                            best_iou = iou
-                            best_gt_idx = gt_idx
-                    
+                    best_gt_idx = ious.argmax()
+                    best_iou = ious[best_gt_idx]
                     all_ious.append(best_iou)
                     
-                    if best_iou >= self.iou_thresh and best_gt_idx >= 0:
+                    if best_iou >= self.iou_thresh:
                         gt_matched[best_gt_idx] = True
                         matched_boxes += 1
                         
                         gt_label = gt_labels[best_gt_idx]
+                        det_label = det_labels[det_idx]
                         is_person = gt_label[0] > 0.5
                         
                         if is_person:
                             matched_person += 1
                         
-                        # Store OBJECT
-                        obj_pred = det_label[:self.num_objects]
-                        obj_gt = gt_label[:self.num_objects].argmax()
-                        all_object_preds.append(obj_pred)
-                        all_object_gts.append(obj_gt)
+                        all_object_preds.append(det_label[:self.num_objects])
+                        all_object_gts.append(gt_label[:self.num_objects].argmax())
                         
-                        # Store RELATION
-                        rel_pred = det_label[self.num_objects + self.num_actions:]
-                        rel_gt = gt_label[self.num_objects + self.num_actions:]
-                        all_relation_preds.append(rel_pred)
-                        all_relation_gts.append(rel_gt > 0.5)
+                        all_relation_preds.append(det_label[self.num_objects + self.num_actions:])
+                        all_relation_gts.append(gt_label[self.num_objects + self.num_actions:] > 0.5)
                         
-                        # Store ACTION (persons only)
                         if is_person:
-                            act_pred = det_label[self.num_objects:self.num_objects + self.num_actions]
-                            act_gt = gt_label[self.num_objects:self.num_objects + self.num_actions]
-                            all_action_preds.append(act_pred)
-                            all_action_gts.append(act_gt > 0.5)
+                            all_action_preds.append(det_label[self.num_objects:self.num_objects + self.num_actions])
+                            all_action_gts.append(gt_label[self.num_objects:self.num_objects + self.num_actions] > 0.5)
             
             if batch_idx % 50 == 0:
                 print(f"  [{batch_idx}/{len(dataloader)}] processed...")

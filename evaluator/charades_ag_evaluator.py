@@ -258,15 +258,17 @@ class CharadesAGEvaluator:
         """
         model.eval()
         
-        # Create dataloader
+        num_workers = 8
         testloader = torch.utils.data.DataLoader(
             dataset=self.testset,
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=self.collate_fn,
-            num_workers=2,
+            num_workers=num_workers,
             drop_last=False,
-            pin_memory=False  # Disabled to avoid OOM on constrained devices
+            pin_memory=True,
+            persistent_workers=num_workers > 0,
+            prefetch_factor=4 if num_workers > 0 else None
         )
         
         epoch_size = len(testloader)
@@ -290,7 +292,7 @@ class CharadesAGEvaluator:
             if max_samples and iter_i >= epoch_size:
                 break
             
-            batch_video_clip = batch_video_clip.to(model.device)
+            batch_video_clip = batch_video_clip.to(model.device, non_blocking=True)
             
             with torch.no_grad():
                 # Model returns list of detection arrays
