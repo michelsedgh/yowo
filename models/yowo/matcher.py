@@ -46,6 +46,7 @@ class SimOTA(object):
 
         # [N, Mp]
         pair_wise_ious, _ = box_iou(tgt_bboxes, box_preds_)
+        pair_wise_ious = torch.nan_to_num(pair_wise_ious, nan=0.0, posinf=0.0, neginf=0.0).clamp_(0.0, 1.0)
         pair_wise_ious_loss = -torch.log(pair_wise_ious + 1e-8)
 
         if len(tgt_labels.shape) == 1:

@@ -69,8 +69,11 @@ def box_iou(boxes1, boxes2):
     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
 
     union = area1[:, None] + area2 - inter
-
-    iou = inter / union
+    eps = torch.finfo(inter.dtype).eps
+    valid = union > eps
+    iou = torch.zeros_like(inter)
+    iou[valid] = inter[valid] / union[valid]
+    iou = torch.nan_to_num(iou, nan=0.0, posinf=0.0, neginf=0.0).clamp_(0.0, 1.0)
     return iou, union
 
 

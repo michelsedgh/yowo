@@ -280,9 +280,16 @@ def train():
         warmup = True
     
     # Mixed Precision Training (AMP)
-    if args.amp:
-        print('Using Automatic Mixed Precision (AMP) training')
-        scaler = torch.amp.GradScaler('cuda')
+    amp_dtype = None
+    if args.amp and device.type == 'cuda':
+        if hasattr(torch.cuda, 'is_bf16_supported') and torch.cuda.is_bf16_supported():
+            amp_dtype = torch.bfloat16
+            print('Using Automatic Mixed Precision (AMP) with bfloat16')
+            scaler = None
+        else:
+            amp_dtype = torch.float16
+            print('Using Automatic Mixed Precision (AMP) with float16')
+            scaler = torch.amp.GradScaler('cuda')
     else:
         scaler = None
 
@@ -354,8 +361,8 @@ def train():
             # inference and loss (with optional AMP)
             if do_profile:
                 stage_t0 = time.time()
-            if scaler is not None:
-                with torch.amp.autocast(device_type='cuda'):
+            if amp_dtype is not None:
+                with torch.amp.autocast(device_type='cuda', dtype=amp_dtype):
                     outputs = model(video_clips)
             else:
                 outputs = model(video_clips)
@@ -365,8 +372,8 @@ def train():
 
             if do_profile:
                 stage_t0 = time.time()
-            if scaler is not None:
-                with torch.amp.autocast(device_type='cuda'):
+            if amp_dtype is not None:
+                with torch.amp.autocast(device_type='cuda', dtype=amp_dtype):
                     loss_dict = criterion(outputs, targets)
                     losses = loss_dict['losses']
             else:
@@ -384,9 +391,23 @@ def train():
                 torch.cuda.synchronize()
                 profile_stats['reduce'] += time.time() - stage_t0
 
-            # check loss
-            if torch.isnan(losses):
-                print('loss is NAN !!')
+            # Skip non-finite batches safely. If we continue without clearing
+            # references, the previous graph stays alive and the next forward can OOM.
+            if not torch.isfinite(losses):
+                print('Non-finite loss detected, skipping batch:')
+                for key in ['loss_conf', 'loss_cls', 'loss_obj', 'loss_act', 'loss_rel', 'loss_box', 'losses']:
+                    value = loss_dict.get(key)
+                    if torch.is_tensor(value):
+                        scalar = value.detach().float().mean().item()
+                        finite = bool(torch.isfinite(value).all().item())
+                        status = 'finite' if finite else 'non-finite'
+                        print(f'  {key}: {scalar:.4f} ({status})')
+                optimizer.zero_grad(set_to_none=True)
+                del outputs, loss_dict, loss_dict_reduced, losses, video_clips
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                if profile_enabled:
+                    last_iter_end = time.time()
                 continue
 
             # Backward (with optional AMP scaling)
