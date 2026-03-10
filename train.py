@@ -289,7 +289,7 @@ def train():
     profile_enabled = args.profile_iters > 0 and device.type == 'cuda'
     if args.profile_iters > 0 and device.type != 'cuda':
         print('Detailed train profiling requires CUDA. Skipping profiling.')
-    profile_interval = 1000
+    profile_interval = 300
     profile_stats = {
         'data': 0.0,
         'h2d': 0.0,
