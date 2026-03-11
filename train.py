@@ -2,6 +2,7 @@ import cv2
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 
+import gc
 import os
 import time
 import argparse
@@ -505,6 +506,11 @@ def train():
         
         
         
+        # Free training-loop garbage before eval forks new workers.
+        # This keeps the main process's RSS small so eval workers
+        # don't inherit (and CoW-copy) stale pages.
+        gc.collect()
+
         # Evaluation: every eval_epoch epochs OR at the last epoch
         should_eval = (epoch + 1) % args.eval_epoch == 0 or (epoch + 1) == max_epoch
         if should_eval:

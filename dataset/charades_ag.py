@@ -54,6 +54,8 @@ class CharadesAGDataset(Dataset):
         else:
             self.video_fps = {}
 
+        self._frame_ext_cache = {}
+
     def _load_simple_list(self, path):
         with open(path, 'r') as f:
             return [line.strip().lower() for line in f if line.strip()]
@@ -134,10 +136,6 @@ class CharadesAGDataset(Dataset):
         
         video_clip = []
         frames_dir = os.path.join(self.data_root, 'frames', video_id_full)
-        
-        # Cache the frame extension and base path for this video
-        if not hasattr(self, '_frame_ext_cache'):
-            self._frame_ext_cache = {}
         
         cache_key = video_id_full
         cached = self._frame_ext_cache.get(cache_key)

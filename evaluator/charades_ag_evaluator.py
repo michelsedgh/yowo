@@ -10,6 +10,7 @@ Following the same patterns as ava_evaluator.py and ucf_jhmdb_evaluator.py
 """
 
 import os
+import gc
 import time
 import numpy as np
 import torch
@@ -259,6 +260,8 @@ class CharadesAGEvaluator:
         model.eval()
         
         num_workers = 8
+        def _no_gc(wid):
+            gc.disable()
         testloader = torch.utils.data.DataLoader(
             dataset=self.testset,
             batch_size=self.batch_size,
@@ -267,8 +270,9 @@ class CharadesAGEvaluator:
             num_workers=num_workers,
             drop_last=False,
             pin_memory=True,
-            persistent_workers=num_workers > 0,
-            prefetch_factor=4 if num_workers > 0 else None
+            persistent_workers=False,
+            prefetch_factor=4 if num_workers > 0 else None,
+            worker_init_fn=_no_gc if num_workers > 0 else None
         )
         
         epoch_size = len(testloader)

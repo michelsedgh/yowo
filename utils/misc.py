@@ -1,4 +1,5 @@
 import os
+import gc
 
 import torch
 import torch.nn as nn
@@ -181,6 +182,16 @@ def build_dataset(d_cfg, args, is_train=False):
     return dataset, evaluator, num_classes
 
 
+def _worker_init_fn(worker_id):
+    """Disable GC in forked workers to prevent copy-on-write memory explosion.
+    
+    Large pickle dicts (person_bboxes, object_data) are shared via CoW after fork.
+    Python's GC walks all tracked objects, touching every page and triggering CoW.
+    Disabling GC keeps pages shared. Reference counting still frees non-cyclic objects.
+    """
+    gc.disable()
+
+
 def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False):
     prefetch_factor = None
     if args.num_workers > 0:
@@ -198,6 +209,16 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             estimated_inflight_gb = estimated_sample_mb * batch_size * args.num_workers * 2 / 1024
             prefetch_factor = 1 if estimated_inflight_gb > 8.0 else 2
 
+    # Prevent copy-on-write memory explosion in forked worker processes.
+    # gc.freeze() moves all currently tracked objects (especially the large pickle
+    # dicts person_bboxes/object_data) to a permanent generation that GC never visits.
+    # Combined with gc.disable() in workers, this keeps forked pages shared.
+    if args.num_workers > 0:
+        gc.collect()
+        gc.freeze()
+
+    worker_init = _worker_init_fn if args.num_workers > 0 else None
+
     if is_train:
         # distributed
         if args.distributed:
@@ -208,18 +229,17 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
         batch_sampler_train = torch.utils.data.BatchSampler(sampler, 
                                                             batch_size, 
                                                             drop_last=True)
-        # train dataloader - optimized for A100
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             batch_sampler=batch_sampler_train,
             collate_fn=collate_fn, 
             num_workers=args.num_workers,
             pin_memory=True,
-            persistent_workers=args.num_workers > 0,  # Keep workers alive between epochs
-            prefetch_factor=prefetch_factor
+            persistent_workers=args.num_workers > 0,
+            prefetch_factor=prefetch_factor,
+            worker_init_fn=worker_init
             )
     else:
-        # test dataloader - optimized
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset, 
             shuffle=False,
@@ -228,7 +248,8 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             drop_last=False,
             pin_memory=True,
             persistent_workers=args.num_workers > 0,
-            prefetch_factor=prefetch_factor
+            prefetch_factor=prefetch_factor,
+            worker_init_fn=worker_init
             )
     
     if args.num_workers > 0:

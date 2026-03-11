@@ -11,6 +11,7 @@ Author: Created for smart home action detection
 """
 
 import os
+import gc
 import time
 import numpy as np
 import torch
@@ -91,6 +92,8 @@ class ReadableEvaluator:
         device = next(model.parameters()).device
         
         num_workers = 8
+        def _no_gc(wid):
+            gc.disable()
         testloader = torch.utils.data.DataLoader(
             dataset=self.testset,
             batch_size=self.batch_size,
@@ -99,8 +102,9 @@ class ReadableEvaluator:
             num_workers=num_workers,
             drop_last=False,
             pin_memory=True,
-            persistent_workers=num_workers > 0,
-            prefetch_factor=4 if num_workers > 0 else None
+            persistent_workers=False,
+            prefetch_factor=4 if num_workers > 0 else None,
+            worker_init_fn=_no_gc if num_workers > 0 else None
         )
         
         # Metrics storage

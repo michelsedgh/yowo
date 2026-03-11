@@ -9,6 +9,7 @@ Shows ACTUAL numbers instead of thresholds:
 """
 
 import os
+import gc
 import time
 import numpy as np
 import torch
@@ -105,6 +106,8 @@ class SmartHomeEvaluatorV2:
         device = model.device
         
         num_workers = 8
+        def _no_gc(wid):
+            gc.disable()
         dataloader = torch.utils.data.DataLoader(
             self.testset,
             batch_size=self.batch_size,
@@ -113,8 +116,9 @@ class SmartHomeEvaluatorV2:
             num_workers=num_workers,
             drop_last=False,
             pin_memory=True,
-            persistent_workers=num_workers > 0,
-            prefetch_factor=4 if num_workers > 0 else None
+            persistent_workers=False,
+            prefetch_factor=4 if num_workers > 0 else None,
+            worker_init_fn=_no_gc if num_workers > 0 else None
         )
         
         print(f"\n{'='*70}")
