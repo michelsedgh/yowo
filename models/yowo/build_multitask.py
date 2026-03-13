@@ -2,8 +2,8 @@
 Builder for YOWOMultiTask model.
 
 UPDATED:
-- Now uses Focal Loss instead of per-class weights
-- Added use_focal_loss flag (default True)
+- Uses BCE with per-class pos_weight for actions/relations
+- Per-class weights calculated from actual dataset statistics
 - end2end flag now properly passed from args
 """
 
@@ -19,11 +19,10 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
     Build YOWOMultiTask model and criterion.
     
     Args:
-        args: Training arguments (should contain --end2end and --no_focal_loss flags)
+        args: Training arguments (should contain --end2end flag)
     """
     # Get end2end flag from args (default False for backward compatibility)
     end2end = getattr(args, 'end2end', False)
-    use_focal_loss = not getattr(args, 'no_focal_loss', False)  # Default: use focal loss
     
     print("="*50)
     print("Building YOWOMultiTask")
@@ -32,7 +31,7 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
     print(f"  Relations: {num_relations}")
     print(f"  Total classes: {num_classes}")
     print(f"  End-to-End NMS-Free: {end2end}")
-    print(f"  Focal Loss: {use_focal_loss}")
+    print(f"  Loss: BCE with per-class pos_weight")
     print("="*50)
     
     model = YOWOMultiTask(
@@ -62,8 +61,7 @@ def build_yowo_multitask(args, d_cfg, m_cfg, device, num_classes=219,
             num_classes=num_classes,
             num_objects=num_objects,
             num_actions=num_actions,
-            num_relations=num_relations,
-            use_focal_loss=use_focal_loss
+            num_relations=num_relations
         )
     else:
         criterion = None

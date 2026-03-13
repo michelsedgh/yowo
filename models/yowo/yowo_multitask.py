@@ -1,19 +1,15 @@
 """
 YOWO Multi-Task V2 for Action Genome + Charades
 
-CRITICAL FIX: Use objectness confidence to gate attention!
+Architecture: DEFINITIVE CASCADE (Object → Relation → Action)
 
-The previous version had a fatal flaw:
-- Object prediction is softmax over 36 classes (no background)
-- obj_probs.max() is always high (~0.7) even at background positions
-- Attention spread uniformly → no spatial grounding
+Context modules use local pooling (5x5 avg_pool) to enrich features with
+nearby object/relation predictions. This replaced attention-based context
+which spread gradients too thin.
 
-This version fixes it by:
-1. Passing confidence logits to context modules  
-2. Using conf * obj_probs as "grounded object presence"
-3. Only attending to positions where objects are ACTUALLY detected
-
-DEFINITIVE CASCADE: Object → Relation → Action
+NOTE: Confidence gating was tested but REMOVED because it dampened
+action gradients by 50-70%. Confidence is used for inference filtering
+(conf_thresh), not training gradient gating.
 """
 
 import copy

@@ -2,13 +2,18 @@
 Multi-Task Loss for Action Genome + Charades
 
 Matches the YOWOMultiTask model:
-- Object (0-35): CrossEntropy (exclusive)
-- Actions: Focal Loss with IoU weighting (handles class imbalance)
-- Relations: Focal Loss with IoU weighting (handles class imbalance)
+- Object (0-35): CrossEntropy with class weights (exclusive)
+- Actions (35 classes): BCE with per-class pos_weight (multi-label)
+- Relations (26 classes): BCE with per-class pos_weight (multi-label)
 
-UPDATED: Now uses Focal Loss instead of per-class weights for better
-handling of class imbalance. Focal Loss automatically downweights easy/common
-examples and upweights hard/rare examples.
+KEY DESIGN DECISIONS:
+1. Per-class pos_weight calculated from actual dataset statistics
+   - Actions: range 4.01 (common) to 50.0 (rare)
+   - Relations: range 0.43 (very common) to 50.0 (rare)
+2. Aggressive decisiveness loss to prevent lazy predictions
+   - Positives must predict > 0.5
+   - Negatives must predict < 0.1
+3. Actions weighted 1.5x (primary task), relations 0.5x (secondary)
 """
 
 import torch
@@ -102,8 +107,7 @@ class MultiTaskCriterion(object):
     """
     
     def __init__(self, args, img_size, num_classes=219, 
-                 num_objects=36, num_actions=157, num_relations=26,
-                 use_focal_loss=True):
+                 num_objects=36, num_actions=157, num_relations=26):
         self.img_size = img_size
         self.num_classes = num_classes
         self.num_objects = num_objects
@@ -113,21 +117,27 @@ class MultiTaskCriterion(object):
         self.loss_conf_weight = args.loss_conf_weight
         self.loss_cls_weight = args.loss_cls_weight
         self.loss_reg_weight = args.loss_reg_weight
-        self.use_focal_loss = use_focal_loss
         
-        # Confidence loss: BCE (NOT focal). Focal with high gamma causes conf to collapse
-        # because it stops penalizing background anchors predicting p=0.05-0.15, which
-        # pass the inference threshold (conf_thresh=0.05) and flood eval with false positives.
-        # BCE maintains strong gradient for ALL confidence levels.
-        self.conf_lossf = nn.BCEWithLogitsLoss(reduction='none')
-        print(f"  Using BCE for confidence (stable gradient at all confidence levels)")
+        # ================================================================
+        # CONFIDENCE LOSS - BCE with pos_weight for FG/BG imbalance
+        # ================================================================
+        # CRITICAL: Without pos_weight, ~100:1 BG:FG ratio causes model to
+        # predict conf→0 everywhere. This explains "detection drops"!
+        # 
+        # Math: 64000 anchors, ~400 foreground → 160:1 ratio
+        # Using pos_weight=50 (conservative) to upweight foreground gradient
+        # ================================================================
+        conf_pos_weight = torch.tensor([50.0])
+        self.conf_lossf = nn.BCEWithLogitsLoss(pos_weight=conf_pos_weight, reduction='none')
+        self.conf_pos_weight = conf_pos_weight
+        print(f"  Confidence BCE: pos_weight=50 (FG/BG balance for ~100:1 ratio)")
         
         # Object class weights - sqrt(max_count / class_count) from actual eval data
         # Recalculated from E5 export: person=13528, table=2050, chair=1540, etc.
         # Formula: sqrt(max_samples / class_samples), capped at 8.0
         # max_samples = 13528 (person)
         obj_class_weights = torch.tensor([
-            0.5,   # 0: person (13528 samples) - downweight but not starve (actions depend on person detection)
+            1.0,   # 0: person (13528 samples) - KEEP FULL WEIGHT (actions depend on person detection!)
             6.98,  # 1: bag (278 samples)
             4.18,  # 2: bed (775 samples)
             5.29,  # 3: blanket (484 samples)
@@ -169,10 +179,15 @@ class MultiTaskCriterion(object):
         self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
         print(f"  Using object class weights (rare classes upweighted 8-15x)")
         
-        # Action class weights - loaded from smart_home config if available
-        # These weights upweight rare actions (e.g., "awakening" 2.18x, "shoes" 2.45x)
-        # Focal Loss handles easy/hard imbalance, class weights handle frequency imbalance
-        self.act_class_weights = None
+        # ================================================================
+        # BCE LOSS FOR ACTIONS AND RELATIONS (no Focal Loss)
+        # ================================================================
+        # Load per-class pos_weights from config (calculated from actual data)
+        # Each class needs its own pos_weight = num_negatives / num_positives
+        # This balances gradient so rare classes get appropriate learning signal
+        # ================================================================
+        
+        smart_home_cfg = {}
         try:
             import json
             import os
@@ -180,29 +195,34 @@ class MultiTaskCriterion(object):
             if os.path.exists(config_path):
                 with open(config_path) as f:
                     smart_home_cfg = json.load(f)
-                if 'action_class_weights' in smart_home_cfg and num_actions == smart_home_cfg.get('num_actions', 0):
-                    self.act_class_weights = torch.tensor(smart_home_cfg['action_class_weights'], dtype=torch.float32)
-                    print(f"  Using action class weights from smart_home config ({len(self.act_class_weights)} classes, range {self.act_class_weights.min():.2f}-{self.act_class_weights.max():.2f})")
         except Exception as e:
-            print(f"  Warning: Could not load action class weights: {e}")
+            print(f"  Warning: Could not load smart_home config: {e}")
         
-        # Focal Loss for actions and relations (handles class imbalance)
-        if use_focal_loss:
-            print("  Using Focal Loss (gamma=2.0, alpha=0.25) for actions and relations")
-            # alpha=0.25: strong negative suppression (neg gets 0.75 weight vs pos 0.25).
-            # With ~33 negatives per 2 positives per box, this keeps negatives firmly near 0.
-            # fixedrun? proved alpha=0.25 gives 4-8x pos/neg separation ratio.
-            # gamma=2.0: standard focal (paper default). Downweights already-learned common
-            # actions, redirecting gradient to unlearned rare ones. At p=0.7, focal_weight
-            # drops to 0.09 (9% gradient). Combined with class weights, this gives rare
-            # actions much more relative gradient than fixedrun?'s gamma=1.0 did.
-            self.act_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
-            self.rel_lossf = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='none')
+        # ACTION pos_weights: per-class from actual data
+        # Range: 4.01 (sitting in chair) to 50.0 (closing laptop)
+        if 'action_pos_weights' in smart_home_cfg and num_actions == smart_home_cfg.get('num_actions', 0):
+            act_pos_weight = torch.tensor(smart_home_cfg['action_pos_weights'], dtype=torch.float32)
+            print(f"  Action BCE: per-class pos_weight (range {act_pos_weight.min():.1f}-{act_pos_weight.max():.1f})")
         else:
-            print("  Using standard BCE for actions and relations")
-            self.act_lossf = nn.BCEWithLogitsLoss(reduction='none')
-            self.rel_lossf = nn.BCEWithLogitsLoss(reduction='none')
+            # Fallback: flat weight (not ideal but functional)
+            act_pos_weight = torch.full((num_actions,), num_actions - 1.0, dtype=torch.float32)
+            print(f"  Action BCE: flat pos_weight={num_actions - 1.0} (fallback)")
         
+        # RELATION pos_weights: per-class from actual data
+        # Range: 0.43 (infrontof - very common) to 50.0 (rare relations)
+        # CRITICAL: Some relations like 'infrontof' need DOWN-weighting (pos_weight < 1)
+        if 'relation_pos_weights' in smart_home_cfg and len(smart_home_cfg['relation_pos_weights']) == num_relations:
+            rel_pos_weight = torch.tensor(smart_home_cfg['relation_pos_weights'], dtype=torch.float32)
+            print(f"  Relation BCE: per-class pos_weight (range {rel_pos_weight.min():.1f}-{rel_pos_weight.max():.1f})")
+        else:
+            # Fallback: flat weight
+            rel_pos_weight = torch.full((num_relations,), num_relations - 1.0, dtype=torch.float32)
+            print(f"  Relation BCE: flat pos_weight={num_relations - 1.0} (fallback)")
+        
+        self.act_lossf = nn.BCEWithLogitsLoss(pos_weight=act_pos_weight, reduction='none')
+        self.rel_lossf = nn.BCEWithLogitsLoss(pos_weight=rel_pos_weight, reduction='none')
+        self.act_pos_weight = act_pos_weight
+        self.rel_pos_weight = rel_pos_weight
         # One-to-Many Matcher (standard, topk>1 for rich supervision)
         self.matcher = SimOTA(
             num_classes=num_classes,
@@ -263,6 +283,13 @@ class MultiTaskCriterion(object):
             obj_probs_sm = F.softmax(obj_preds.detach(), dim=-1)
             obj_probs_sm = obj_probs_sm.clamp(1e-6, 1 - 1e-6)
             obj_logits_for_matcher = torch.log(obj_probs_sm / (1 - obj_probs_sm))
+        
+        # CRITICAL FIX 1: Matcher should ONLY use Object logits, not Actions/Relations.
+        # Non-person objects (e.g. "food", "bag") have ground-truth 0 for all actions/relations.
+        # Since their action logits are untrained, calculating cross-class BCE on them creates
+        # massive random noise that completely confuses SimOTA anchor matching for small objects.
+        cls_preds_matcher = obj_logits_for_matcher
+        
         cls_preds = torch.cat([obj_logits_for_matcher, act_preds, rel_preds], dim=-1)
         
         # Label assignment
@@ -301,9 +328,9 @@ class MultiTaskCriterion(object):
                     fpn_strides=fpn_strides,
                     anchors=anchors,
                     pred_conf=conf_preds[batch_idx],
-                    pred_cls=cls_preds[batch_idx],
+                    pred_cls=cls_preds_matcher[batch_idx],
                     pred_box=box_preds[batch_idx],
-                    tgt_labels=tgt_labels,
+                    tgt_labels=tgt_labels[:, :self.num_objects],  # ONLY evaluate object class cost
                     tgt_bboxes=tgt_bboxes_scaled,
                 )
 
@@ -317,9 +344,10 @@ class MultiTaskCriterion(object):
                 obj_target = matched_labels[:, :self.num_objects].argmax(dim=-1)
                 
                 # Actions & Relations: HARD (0/1) targets
-                # IoU quality applied as loss WEIGHT, not target modification.
-                # Soft targets (target * iou) cause BCE to converge to p=iou
-                # instead of p=1.0, which is fundamentally wrong.
+                # NOTE: IoU weighting was considered but NOT implemented.
+                # All matched anchors weighted equally regardless of box quality.
+                # Soft targets (target * iou) were tested but caused BCE to
+                # converge to p=iou instead of p=1.0.
                 act_target = matched_labels[:, self.num_objects:self.num_objects+self.num_actions]
                 rel_target = matched_labels[:, self.num_objects+self.num_actions:]
                 
@@ -348,7 +376,9 @@ class MultiTaskCriterion(object):
             torch.distributed.all_reduce(num_fg)
         num_fg = (num_fg / get_world_size()).clamp(1.0)
 
-        # Confidence loss
+        # Confidence loss (with pos_weight for FG/BG balance)
+        if self.conf_lossf.pos_weight.device != device:
+            self.conf_lossf.pos_weight = self.conf_lossf.pos_weight.to(device)
         loss_conf = self.conf_lossf(conf_preds.view(-1, 1), conf_targets)
         loss_conf = loss_conf.sum() / num_fg
 
@@ -364,69 +394,82 @@ class MultiTaskCriterion(object):
         else:
             loss_obj = torch.tensor(0.0, device=device)
 
-        # Action loss (Focal/BCE - multi-label, PERSON-ONLY)
-        # Uses class weights to upweight rare actions (e.g., "awakening" 2.18x)
+        # ================================================================
+        # ACTION LOSS (BCE with per-class pos_weight, PERSON-ONLY)
+        # ================================================================
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0:
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
             if person_act_preds.shape[0] > 0:
+                # Move pos_weight to correct device
+                if self.act_lossf.pos_weight.device != device:
+                    self.act_lossf.pos_weight = self.act_lossf.pos_weight.to(device)
+                
+                # BCE loss with per-class pos_weight handles gradient imbalance
                 loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
-                # Apply action class weights if available (upweights rare actions)
-                if self.act_class_weights is not None:
-                    if self.act_class_weights.device != device:
-                        self.act_class_weights = self.act_class_weights.to(device)
-                    loss_act = loss_act * self.act_class_weights.unsqueeze(0)  # [N, C] * [1, C]
-                # CRITICAL FIX: Divide by PERSON fg count, not all fg
-                # Action loss is only computed on person boxes, so normalization should match
-                # Previously divided by num_fg (all boxes) which diluted the gradient by ~3x
+                
+                # Normalize by PERSON fg count (not all boxes)
                 num_person_fg = max(person_act_preds.shape[0], 1)
                 loss_act = loss_act.sum() / num_person_fg
                 
-                # PER-SAMPLE DECISIVENESS LOSS: the model must COMMIT to predictions.
-                # Positives must predict > 0.5 (logit > 0), negatives must predict < 0.1 (logit < -2.2).
-                # Operates in logit space for numerical stability and constant gradient.
-                # Strongest early in training when everything predicts ~0.5, naturally fades
-                # as model learns separation. Complements focal: focal pushes toward 0/1,
-                # this provides extra kick for predictions stuck in the uncertain middle.
-                pos_mask = person_act_targets > 0.5  # [N, C]
+                # ============================================================
+                # AGGRESSIVE DECISIVENESS LOSS
+                # ============================================================
+                # Force model to COMMIT: positives MUST predict > 0.5, negatives < 0.1
+                # This prevents lazy predictions stuck in the middle (0.2-0.4 range)
+                # Weight = 1.5 to push hard
+                # ============================================================
+                pos_mask = person_act_targets > 0.5
                 neg_mask = ~pos_mask
                 
-                pos_logit_thresh = 0.0    # sigmoid(0) = 0.5
-                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1
+                # AGGRESSIVE thresholds
+                pos_logit_thresh = 0.0    # sigmoid(0) = 0.5 - positives MUST exceed this
+                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1 - negatives MUST be below this
                 
+                # Hinge losses: penalize when not meeting threshold
                 pos_hinge = F.relu(pos_logit_thresh - person_act_preds) * pos_mask.float()
                 neg_hinge = F.relu(person_act_preds - neg_logit_thresh) * neg_mask.float()
                 
-                if self.act_class_weights is not None:
-                    pos_hinge = pos_hinge * self.act_class_weights.unsqueeze(0)
-                    neg_hinge = neg_hinge * self.act_class_weights.unsqueeze(0)
+                # Normalize separately so 33x negatives don't overwhelm positives
+                num_pos = pos_mask.float().sum().clamp(1)
+                num_neg = neg_mask.float().sum().clamp(1)
+                act_gap_loss = pos_hinge.sum() / num_pos + neg_hinge.sum() / num_neg
                 
-                # Normalize pos/neg separately so 33x more negatives don't dominate positives
-                act_gap_loss = (pos_hinge.sum() / pos_mask.float().sum().clamp(1) +
-                                neg_hinge.sum() / neg_mask.float().sum().clamp(1))
-                loss_act = loss_act + 1.0 * act_gap_loss
+                # AGGRESSIVE weight = 1.5 to push model hard
+                loss_act = loss_act + 1.5 * act_gap_loss
             else:
                 loss_act = torch.tensor(0.0, device=device)
         else:
             loss_act = torch.tensor(0.0, device=device)
 
-        # Relation loss (Focal/BCE - multi-label) + gap enforcement
+        # ================================================================
+        # RELATION LOSS (BCE with per-class pos_weight)
+        # ================================================================
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
+            # Move pos_weight to correct device
+            if self.rel_lossf.pos_weight.device != device:
+                self.rel_lossf.pos_weight = self.rel_lossf.pos_weight.to(device)
+            
+            # BCE loss with per-class pos_weight
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
             loss_rel = loss_rel.sum() / num_fg
             
-            # Per-sample decisiveness loss for relations (same design as actions)
+            # AGGRESSIVE decisiveness loss for relations (same as actions)
             rel_pos_mask = rel_targets > 0.5
             rel_neg_mask = ~rel_pos_mask
             
+            # Same aggressive thresholds
             rel_pos_hinge = F.relu(0.0 - matched_rel_preds) * rel_pos_mask.float()
             rel_neg_hinge = F.relu(matched_rel_preds - (-2.2)) * rel_neg_mask.float()
             
-            rel_gap_loss = (rel_pos_hinge.sum() / rel_pos_mask.float().sum().clamp(1) +
-                            rel_neg_hinge.sum() / rel_neg_mask.float().sum().clamp(1))
-            loss_rel = loss_rel + 0.5 * rel_gap_loss
+            num_rel_pos = rel_pos_mask.float().sum().clamp(1)
+            num_rel_neg = rel_neg_mask.float().sum().clamp(1)
+            rel_gap_loss = rel_pos_hinge.sum() / num_rel_pos + rel_neg_hinge.sum() / num_rel_neg
+            
+            # Slightly lower weight for relations (1.0) since they're secondary task
+            loss_rel = loss_rel + 1.0 * rel_gap_loss
         else:
             loss_rel = torch.tensor(0.0, device=device)
 
@@ -438,12 +481,16 @@ class MultiTaskCriterion(object):
         else:
             loss_box = torch.tensor(0.0, device=device)
 
-        # Priority weighting: actions (primary task) > objects (person detection) > relations (context)
-        # Default equal weighting gave act only 23% of cls gradient. Now:
-        #   act: 2.0 * ~14 = ~28  (44%)  ← primary task, gets strongest backbone signal
-        #   obj: 1.0 * ~23 = ~23  (36%)  ← person detection is critical path for actions
-        #   rel: 0.5 * ~25 = ~12  (20%)  ← spatial context still useful, but not dominant
-        loss_cls = loss_obj + 2.0 * loss_act + 0.5 * loss_rel
+        # ================================================================
+        # FINAL LOSS WEIGHTING
+        # ================================================================
+        # Actions are the PRIMARY task - weight 1.5 to push learning
+        # Relations are SECONDARY - weight 0.5
+        # Objects use CrossEntropy with class weights - weight 1.0
+        # ================================================================
+        act_weight = 1.5  # Actions are primary task, push hard
+        rel_weight = 0.5  # Relations are secondary
+        loss_cls = loss_obj + act_weight * loss_act + rel_weight * loss_rel
         losses = (
             self.loss_conf_weight * loss_conf +
             self.loss_cls_weight * loss_cls +
@@ -462,19 +509,15 @@ class MultiTaskCriterion(object):
 
 
 def build_multitask_criterion(args, img_size, num_classes=219,
-                               num_objects=36, num_actions=157, num_relations=26,
-                               use_focal_loss=True):
+                               num_objects=36, num_actions=157, num_relations=26):
     """
     Build the multi-task criterion.
     
-    Args:
-        use_focal_loss: If True, use Focal Loss for actions/relations
-                       (recommended, handles class imbalance automatically)
-                       If False, use standard BCE
+    Uses BCE with per-class pos_weight for actions and relations.
+    Per-class weights calculated from actual dataset statistics.
     """
     return MultiTaskCriterion(
         args, img_size, num_classes, 
-        num_objects, num_actions, num_relations,
-        use_focal_loss=use_focal_loss
+        num_objects, num_actions, num_relations
     )
 
