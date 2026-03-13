@@ -548,6 +548,9 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, 
             except Exception as e:
                 print(f'   ⚠️  Google Drive backup failed (continuing): {e}')
         
+        # Clear checkpoint_data to free memory (state_dicts can be large)
+        del checkpoint_data
+        
         # THEN EVALUATE
         if evaluator is None:
             print('No evaluator ... continuing training.')
@@ -562,7 +565,14 @@ def eval_one_epoch(args, model_eval, evaluator, epoch, path_to_save, optimizer, 
                 
             # set train mode.
             model_eval.trainable = True
-            model_eval.train()                      
+            model_eval.train()
+            
+            # MEMORY FIX: Force cleanup after evaluation
+            # Evaluator already does gc.collect() + gc.freeze() internally,
+            # but we also clear GPU cache to release any eval tensors
+            if args.cuda and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print(f'   ✅ Evaluation complete, memory cleaned up')
 
     if args.distributed:
         # wait for all processes to synchronize

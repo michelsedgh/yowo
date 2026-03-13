@@ -42,7 +42,8 @@ class CharadesAGEvaluator:
                  collate_fn=None,
                  conf_thresh=0.01,
                  iou_thresh=0.5,
-                 save_path='./evaluator/eval_results/'):
+                 save_path='./evaluator/eval_results/',
+                 num_workers=4):
         
         self.data_root = data_root
         self.img_size = img_size
@@ -53,6 +54,7 @@ class CharadesAGEvaluator:
         self.iou_thresh = iou_thresh
         self.save_path = save_path
         self.collate_fn = collate_fn
+        self.num_workers = num_workers
         
         # Create save directory
         os.makedirs(save_path, exist_ok=True)
@@ -259,7 +261,13 @@ class CharadesAGEvaluator:
         """
         model.eval()
         
-        num_workers = 8
+        # Use num_workers from CLI args (or default)
+        num_workers = self.num_workers
+        
+        # Unfreeze GC before eval to allow proper collection of eval objects
+        gc.unfreeze()
+        gc.collect()
+        
         def _no_gc(wid):
             gc.disable()
         testloader = torch.utils.data.DataLoader(
@@ -271,7 +279,7 @@ class CharadesAGEvaluator:
             drop_last=False,
             pin_memory=True,
             persistent_workers=False,
-            prefetch_factor=4 if num_workers > 0 else None,
+            prefetch_factor=2 if num_workers > 0 else None,
             worker_init_fn=_no_gc if num_workers > 0 else None
         )
         
@@ -437,6 +445,18 @@ class CharadesAGEvaluator:
         
         # Also compute classification-only metrics (using matched boxes)
         self._compute_classification_metrics(all_gt, all_det, epoch)
+        
+        # MEMORY FIX: Explicit cleanup to prevent RAM accumulation
+        del all_gt, all_det
+        
+        # Shutdown dataloader workers explicitly
+        if hasattr(testloader, '_iterator') and testloader._iterator is not None:
+            testloader._iterator._shutdown_workers()
+        del testloader
+        
+        # Force garbage collection and re-freeze for training
+        gc.collect()
+        gc.freeze()
         
         return results
     

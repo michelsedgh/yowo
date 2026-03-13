@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from collections import defaultdict
 import json
+import weakref
 
 from dataset.smart_home import SmartHomeDataset
 from dataset.transforms import BaseTransform
@@ -38,7 +39,8 @@ class SmartHomeEvaluatorV2:
                  conf_thresh=0.1,
                  iou_thresh=0.5,
                  save_path='./evaluator/eval_results/',
-                 smart_home_config=None):
+                 smart_home_config=None,
+                 num_workers=4):
         
         self.data_root = data_root
         self.img_size = img_size
@@ -49,6 +51,7 @@ class SmartHomeEvaluatorV2:
         self.iou_thresh = iou_thresh
         self.save_path = save_path
         self.collate_fn = collate_fn
+        self.num_workers = num_workers
         
         # Load smart home config
         if smart_home_config is None:
@@ -105,7 +108,13 @@ class SmartHomeEvaluatorV2:
         model.eval()
         device = model.device
         
-        num_workers = 8
+        # Use num_workers from CLI args (or default)
+        num_workers = self.num_workers
+        
+        # Unfreeze GC before eval to allow proper collection of eval objects
+        gc.unfreeze()
+        gc.collect()
+        
         def _no_gc(wid):
             gc.disable()
         dataloader = torch.utils.data.DataLoader(
@@ -117,7 +126,7 @@ class SmartHomeEvaluatorV2:
             drop_last=False,
             pin_memory=True,
             persistent_workers=False,
-            prefetch_factor=4 if num_workers > 0 else None,
+            prefetch_factor=2 if num_workers > 0 else None,
             worker_init_fn=_no_gc if num_workers > 0 else None
         )
         
@@ -606,6 +615,22 @@ class SmartHomeEvaluatorV2:
         with open(save_file, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"💾 Saved: {save_file}")
+        
+        # MEMORY FIX: Explicit cleanup to prevent RAM accumulation
+        # Delete large arrays before returning
+        del all_action_preds, all_action_gts
+        del all_object_preds, all_object_gts
+        del all_relation_preds, all_relation_gts
+        del all_ious
+        
+        # Shutdown dataloader workers explicitly
+        if hasattr(dataloader, '_iterator') and dataloader._iterator is not None:
+            dataloader._iterator._shutdown_workers()
+        del dataloader
+        
+        # Force garbage collection and re-freeze for training
+        gc.collect()
+        gc.freeze()
         
         return results
 

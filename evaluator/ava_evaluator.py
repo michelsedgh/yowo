@@ -1,4 +1,5 @@
 import time
+import gc
 import numpy as np
 import os
 from collections import defaultdict
@@ -206,6 +207,11 @@ class AVA_Evaluator(object):
 
     def evaluate_frame_map(self, model, epoch=1):
         model.eval()
+        
+        # MEMORY FIX: Unfreeze GC before eval
+        gc.unfreeze()
+        gc.collect()
+        
         epoch_size = len(self.testloader)
 
         for iter_i, (_, batch_video_clip, batch_target) in enumerate(self.testloader):
@@ -245,5 +251,9 @@ class AVA_Evaluator(object):
         # clear
         del self.all_preds
         self.all_preds = []
+        
+        # MEMORY FIX: Force cleanup and re-freeze for training
+        gc.collect()
+        gc.freeze()
 
         return mAP

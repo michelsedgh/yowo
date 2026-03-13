@@ -223,6 +223,10 @@ class MultiTaskCriterion(object):
         self.rel_lossf = nn.BCEWithLogitsLoss(pos_weight=rel_pos_weight, reduction='none')
         self.act_pos_weight = act_pos_weight
         self.rel_pos_weight = rel_pos_weight
+        
+        # Device tracking - tensors moved once on first forward pass
+        self._device_initialized = False
+        
         # One-to-Many Matcher (standard, topk>1 for rich supervision)
         self.matcher = SimOTA(
             num_classes=num_classes,
@@ -261,12 +265,35 @@ class MultiTaskCriterion(object):
             # Single-head mode (backward compatible)
             return self._compute_loss(outputs, targets, self.matcher)
 
+    def _ensure_device(self, device):
+        """Move all loss tensors to device ONCE (lazy initialization)."""
+        if self._device_initialized:
+            return
+        
+        # Move all weight tensors to device
+        self.conf_pos_weight = self.conf_pos_weight.to(device)
+        self.conf_lossf.pos_weight = self.conf_pos_weight
+        
+        self.obj_class_weights = self.obj_class_weights.to(device)
+        self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none')
+        
+        self.act_pos_weight = self.act_pos_weight.to(device)
+        self.act_lossf.pos_weight = self.act_pos_weight
+        
+        self.rel_pos_weight = self.rel_pos_weight.to(device)
+        self.rel_lossf.pos_weight = self.rel_pos_weight
+        
+        self._device_initialized = True
+    
     def _compute_loss(self, outputs, targets, matcher):
         """Compute loss for a single head (O2M or O2O)."""
         bs = outputs['pred_obj'][0].shape[0]
         device = outputs['pred_obj'][0].device
         fpn_strides = outputs['strides']
         anchors = outputs['anchors']
+        
+        # One-time device initialization (removes per-iteration overhead)
+        self._ensure_device(device)
         
         # Concatenate predictions
         conf_preds = torch.cat(outputs['pred_conf'], dim=1)
@@ -377,18 +404,12 @@ class MultiTaskCriterion(object):
         num_fg = (num_fg / get_world_size()).clamp(1.0)
 
         # Confidence loss (with pos_weight for FG/BG balance)
-        if self.conf_lossf.pos_weight.device != device:
-            self.conf_lossf.pos_weight = self.conf_lossf.pos_weight.to(device)
         loss_conf = self.conf_lossf(conf_preds.view(-1, 1), conf_targets)
         loss_conf = loss_conf.sum() / num_fg
 
         # Object loss (CrossEntropy - exclusive class, with class weights)
         matched_obj_preds = obj_preds.view(-1, self.num_objects)[fg_masks]
         if len(obj_targets) > 0:
-            # Move class weights to correct device if needed
-            if self.obj_class_weights.device != device:
-                self.obj_class_weights = self.obj_class_weights.to(device)
-                self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none')
             loss_obj = self.obj_lossf(matched_obj_preds, obj_targets)
             loss_obj = loss_obj.sum() / num_fg
         else:
@@ -402,10 +423,6 @@ class MultiTaskCriterion(object):
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
             if person_act_preds.shape[0] > 0:
-                # Move pos_weight to correct device
-                if self.act_lossf.pos_weight.device != device:
-                    self.act_lossf.pos_weight = self.act_lossf.pos_weight.to(device)
-                
                 # BCE loss with per-class pos_weight handles gradient imbalance
                 loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
                 
@@ -448,10 +465,6 @@ class MultiTaskCriterion(object):
         # ================================================================
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
-            # Move pos_weight to correct device
-            if self.rel_lossf.pos_weight.device != device:
-                self.rel_lossf.pos_weight = self.rel_lossf.pos_weight.to(device)
-            
             # BCE loss with per-class pos_weight
             loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
             loss_rel = loss_rel.sum() / num_fg

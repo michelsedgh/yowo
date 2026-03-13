@@ -1,4 +1,5 @@
 import os
+import gc
 import torch
 import numpy as np
 from scipy.io import loadmat
@@ -65,6 +66,11 @@ class UCF_JHMDB_Evaluator(object):
 
     def evaluate_frame_map(self, model, epoch=1, show_pr_curve=False):
         print("Metric: Frame mAP")
+        
+        # MEMORY FIX: Unfreeze GC before eval
+        gc.unfreeze()
+        gc.collect()
+        
         # dataloader
         self.testloader = torch.utils.data.DataLoader(
             dataset=self.testset, 
@@ -142,6 +148,11 @@ class UCF_JHMDB_Evaluator(object):
                               self.save_path, self.dataset, show_pr_curve)
         for metric in metric_list:
             print(metric)
+        
+        # MEMORY FIX: Cleanup after evaluation
+        del self.testloader
+        gc.collect()
+        gc.freeze()
 
 
     def evaluate_video_map(self, model):

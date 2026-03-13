@@ -119,7 +119,8 @@ def build_dataset(d_cfg, args, is_train=False):
             collate_fn=CollateFunc(),
             conf_thresh=args.conf_thresh,
             iou_thresh=args.nms_thresh,
-            save_path='./evaluator/eval_results/'
+            save_path='./evaluator/eval_results/',
+            num_workers=args.num_workers
         )
 
     elif args.dataset == 'smart_home':
@@ -164,7 +165,8 @@ def build_dataset(d_cfg, args, is_train=False):
             conf_thresh=args.conf_thresh,
             iou_thresh=getattr(args, 'iou_thresh', 0.5),
             save_path='./evaluator/eval_results/',
-            smart_home_config=smart_home_config
+            smart_home_config=smart_home_config,
+            num_workers=args.num_workers
         )
 
     else:
@@ -218,6 +220,15 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
         gc.freeze()
 
     worker_init = _worker_init_fn if args.num_workers > 0 else None
+    
+    # MEMORY FIX: Don't use persistent_workers if dataset has resample_negatives
+    # because workers fork with a copy of filtered_indices that becomes stale.
+    # Each epoch, workers must re-fork to see the updated indices.
+    has_resample = hasattr(dataset, 'resample_negatives')
+    use_persistent = args.num_workers > 0 and not has_resample
+    
+    if has_resample and args.num_workers > 0:
+        print(f'Note: persistent_workers disabled (dataset has resample_negatives)')
 
     if is_train:
         # distributed
@@ -235,7 +246,7 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             collate_fn=collate_fn, 
             num_workers=args.num_workers,
             pin_memory=True,
-            persistent_workers=args.num_workers > 0,
+            persistent_workers=use_persistent,
             prefetch_factor=prefetch_factor,
             worker_init_fn=worker_init
             )
@@ -247,13 +258,13 @@ def build_dataloader(args, dataset, batch_size, collate_fn=None, is_train=False)
             num_workers=args.num_workers,
             drop_last=False,
             pin_memory=True,
-            persistent_workers=args.num_workers > 0,
+            persistent_workers=use_persistent,
             prefetch_factor=prefetch_factor,
             worker_init_fn=worker_init
             )
     
     if args.num_workers > 0:
-        print(f'DataLoader workers={args.num_workers}, prefetch_factor={prefetch_factor}')
+        print(f'DataLoader workers={args.num_workers}, prefetch_factor={prefetch_factor}, persistent={use_persistent}')
 
     return dataloader
     
