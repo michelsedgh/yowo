@@ -40,7 +40,8 @@ class SmartHomeEvaluatorV2:
                  iou_thresh=0.5,
                  save_path='./evaluator/eval_results/',
                  smart_home_config=None,
-                 num_workers=4):
+                 num_workers=4,
+                 shared_base_dataset=None):
         
         self.data_root = data_root
         self.img_size = img_size
@@ -63,7 +64,8 @@ class SmartHomeEvaluatorV2:
         
         os.makedirs(save_path, exist_ok=True)
         
-        # Build test dataset
+        # Build test dataset - MEMORY FIX: Share base dataset to avoid loading
+        # the ~40GB pickle files twice (once for train, once for eval)
         self.testset = SmartHomeDataset(
             cfg=d_cfg,
             data_root=os.path.join(data_root, 'ActionGenome'),
@@ -71,7 +73,8 @@ class SmartHomeEvaluatorV2:
             img_size=img_size,
             transform=transform,
             len_clip=len_clip,
-            sampling_rate=sampling_rate
+            sampling_rate=sampling_rate,
+            shared_base_dataset=shared_base_dataset
         )
         
         # Class info - use config-driven counts

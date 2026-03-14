@@ -152,7 +152,7 @@ def build_dataset(d_cfg, args, is_train=False):
         # Store config in args for loss function to use
         args.smart_home_config = smart_home_config
         
-        # evaluator
+        # evaluator - MEMORY FIX: Share base dataset to avoid loading ~40GB pickles twice
         evaluator = SmartHomeEvaluatorV2(
             d_cfg=d_cfg,
             data_root=args.root,
@@ -166,7 +166,8 @@ def build_dataset(d_cfg, args, is_train=False):
             iou_thresh=getattr(args, 'iou_thresh', 0.5),
             save_path='./evaluator/eval_results/',
             smart_home_config=smart_home_config,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            shared_base_dataset=dataset.base_dataset  # Share pickle data!
         )
 
     else:

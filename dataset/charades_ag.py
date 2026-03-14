@@ -15,7 +15,14 @@ except ImportError:
     _HAS_CV2 = False
 
 class CharadesAGDataset(Dataset):
-    def __init__(self, cfg, data_root, is_train=False, img_size=224, transform=None, len_clip=16, sampling_rate=1):
+    def __init__(self, cfg, data_root, is_train=False, img_size=224, transform=None, len_clip=16, sampling_rate=1,
+                 shared_pickle_data=None):
+        """
+        Args:
+            shared_pickle_data: Optional tuple (person_bboxes, object_data, video_fps) to share
+                               large pickle data instead of loading from disk again.
+                               This saves ~40GB RAM when both train and eval datasets are loaded.
+        """
         self.data_root = data_root
         self.is_train = is_train
         self.img_size = img_size
@@ -43,16 +50,17 @@ class CharadesAGDataset(Dataset):
         self._obj_to_idx = {name: i for i, name in enumerate(self.ag_objects)}
         self._rel_to_idx = {self._normalize_rel_static(name): i for i, name in enumerate(self.ag_relations)}
         
-        # 2. Load Annotations
-        self._load_data()
+        # 2. Load Annotations - MEMORY FIX: share pickle data if provided
+        self._load_data(shared_pickle_data)
         
-        # 3. Load FPS Mapping
-        fps_path = os.path.join(data_root, 'annotations/video_fps.json')
-        if os.path.exists(fps_path):
-            with open(fps_path, 'r') as f:
-                self.video_fps = json.load(f)
-        else:
-            self.video_fps = {}
+        # 3. Load FPS Mapping (already handled in _load_data if shared)
+        if shared_pickle_data is None:
+            fps_path = os.path.join(data_root, 'annotations/video_fps.json')
+            if os.path.exists(fps_path):
+                with open(fps_path, 'r') as f:
+                    self.video_fps = json.load(f)
+            else:
+                self.video_fps = {}
 
         self._frame_ext_cache = {}
 
@@ -74,12 +82,17 @@ class CharadesAGDataset(Dataset):
                         lines.append(line.lower())
         return lines
 
-    def _load_data(self):
-        # Action Genome Annotations
-        with open(os.path.join(self.data_root, 'annotations/person_bbox.pkl'), 'rb') as f:
-            self.person_bboxes = pickle.load(f)
-        with open(os.path.join(self.data_root, 'annotations/object_bbox_and_relationship.pkl'), 'rb') as f:
-            self.object_data = pickle.load(f)
+    def _load_data(self, shared_pickle_data=None):
+        # MEMORY FIX: Use shared pickle data if provided (saves ~40GB RAM)
+        if shared_pickle_data is not None:
+            self.person_bboxes, self.object_data, self.video_fps = shared_pickle_data
+            print(f"  ✅ Sharing pickle data from training dataset (saved ~40GB RAM)")
+        else:
+            # Action Genome Annotations - load from disk
+            with open(os.path.join(self.data_root, 'annotations/person_bbox.pkl'), 'rb') as f:
+                self.person_bboxes = pickle.load(f)
+            with open(os.path.join(self.data_root, 'annotations/object_bbox_and_relationship.pkl'), 'rb') as f:
+                self.object_data = pickle.load(f)
             
         # Charades Actions (95/5 split - only videos with AG keyframe annotations)
         csv_name = 'Charades_v1_train_95.csv' if self.is_train else 'Charades_v1_test_5.csv'

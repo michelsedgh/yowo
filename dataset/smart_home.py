@@ -32,12 +32,14 @@ class SmartHomeDataset(Dataset):
     
     def __init__(self, cfg, data_root, is_train=False, img_size=224, 
                  transform=None, len_clip=16, sampling_rate=1, 
-                 negative_ratio=0.12):
+                 negative_ratio=0.12, shared_base_dataset=None):
         """
         Args:
             negative_ratio: Fraction of positive frames to add as no-action negatives.
                            0.12 = add 12% extra frames with no smart-home actions.
                            Set to 0 to disable (old behavior).
+            shared_base_dataset: Optional CharadesAGDataset to share pickle data with.
+                                 This avoids loading ~40GB of pickles twice (train + eval).
         """
         # Load smart home config
         config_path = os.path.join(os.path.dirname(__file__), 
@@ -52,10 +54,20 @@ class SmartHomeDataset(Dataset):
         # Include negatives in both train and eval to properly measure false positives
         self.negative_ratio = negative_ratio
         
-        # Load base dataset
-        self.base_dataset = CharadesAGDataset(
-            cfg, data_root, is_train, img_size, transform, len_clip, sampling_rate
-        )
+        # MEMORY FIX: Share base dataset's large pickle data if provided
+        # This saves ~40GB RAM by not loading person_bboxes + object_data twice
+        if shared_base_dataset is not None:
+            # Create a lightweight wrapper that shares the heavy data
+            self.base_dataset = CharadesAGDataset(
+                cfg, data_root, is_train, img_size, transform, len_clip, sampling_rate,
+                shared_pickle_data=(shared_base_dataset.person_bboxes, 
+                                   shared_base_dataset.object_data,
+                                   shared_base_dataset.video_fps)
+            )
+        else:
+            self.base_dataset = CharadesAGDataset(
+                cfg, data_root, is_train, img_size, transform, len_clip, sampling_rate
+            )
         
         # Get dimensions from base dataset
         self.num_objects = self.base_dataset.num_objects  # 36

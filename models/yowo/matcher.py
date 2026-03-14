@@ -54,14 +54,15 @@ class SimOTA(object):
         elif len(tgt_labels.shape) == 2:
             gt_cls = tgt_labels
 
-        # [N, C] -> [N, Mp, C]
-        gt_cls = gt_cls.float().unsqueeze(1).repeat(1, num_in_boxes_anchor, 1)
+        # OPTIMIZED: Use expand instead of repeat (no memory allocation)
+        # [N, C] -> [N, 1, C] -> [N, Mp, C] via broadcasting
+        gt_cls = gt_cls.float().unsqueeze(1)  # [N, 1, C]
 
         with torch.amp.autocast(device_type='cuda', enabled=False):
-            score_preds_ = torch.sqrt(
-                cls_preds_.float().unsqueeze(0).repeat(num_gt, 1, 1).sigmoid_()
-                * conf_preds_.float().unsqueeze(0).repeat(num_gt, 1, 1).sigmoid_()
-            ) # [N, Mp, C]
+            # Use expand for broadcasting (memory-efficient, no copy)
+            cls_preds_exp = cls_preds_.float().unsqueeze(0).expand(num_gt, -1, -1).sigmoid()  # [N, Mp, C]
+            conf_preds_exp = conf_preds_.float().unsqueeze(0).expand(num_gt, -1, -1).sigmoid()  # [N, Mp, 1]
+            score_preds_ = torch.sqrt(cls_preds_exp * conf_preds_exp)  # [N, Mp, C]
             score_preds_ = torch.nan_to_num(score_preds_, nan=0.5, posinf=1.0, neginf=0.0)
             score_preds_ = score_preds_.clamp(min=1e-7, max=1.0 - 1e-7)
             pair_wise_cls_loss = F.binary_cross_entropy(
@@ -106,47 +107,45 @@ class SimOTA(object):
         num_anchors, # M
         num_gt,      # N
         ):
-        # anchor center
-        x_centers = anchors[:, 0]
-        y_centers = anchors[:, 1]
+        # OPTIMIZED: Use broadcasting instead of .repeat() to avoid large allocations
+        # anchor center: [M, 2] -> [1, M] for broadcasting with [N, 1]
+        x_centers = anchors[:, 0].unsqueeze(0)  # [1, M]
+        y_centers = anchors[:, 1].unsqueeze(0)  # [1, M]
 
-        # [M,] -> [1, M] -> [N, M]
-        x_centers = x_centers.unsqueeze(0).repeat(num_gt, 1)
-        y_centers = y_centers.unsqueeze(0).repeat(num_gt, 1)
+        # GT box coords: [N, 4] -> [N, 1] for broadcasting
+        gt_l = gt_bboxes[:, 0:1]  # [N, 1]
+        gt_t = gt_bboxes[:, 1:2]  # [N, 1]
+        gt_r = gt_bboxes[:, 2:3]  # [N, 1]
+        gt_b = gt_bboxes[:, 3:4]  # [N, 1]
 
-        # [N,] -> [N, 1] -> [N, M]
-        gt_bboxes_l = gt_bboxes[:, 0].unsqueeze(1).repeat(1, num_anchors) # x1
-        gt_bboxes_t = gt_bboxes[:, 1].unsqueeze(1).repeat(1, num_anchors) # y1
-        gt_bboxes_r = gt_bboxes[:, 2].unsqueeze(1).repeat(1, num_anchors) # x2
-        gt_bboxes_b = gt_bboxes[:, 3].unsqueeze(1).repeat(1, num_anchors) # y2
-
-        b_l = x_centers - gt_bboxes_l
-        b_r = gt_bboxes_r - x_centers
-        b_t = y_centers - gt_bboxes_t
-        b_b = gt_bboxes_b - y_centers
-        bbox_deltas = torch.stack([b_l, b_t, b_r, b_b], 2)
+        # Broadcasting: [1, M] - [N, 1] -> [N, M]
+        b_l = x_centers - gt_l
+        b_r = gt_r - x_centers
+        b_t = y_centers - gt_t
+        b_b = gt_b - y_centers
+        bbox_deltas = torch.stack([b_l, b_t, b_r, b_b], 2)  # [N, M, 4]
 
         is_in_boxes = bbox_deltas.min(dim=-1).values > 0.0
         is_in_boxes_all = is_in_boxes.sum(dim=0) > 0
-        # in fixed center
-        center_radius = self.center_sampling_radius
-
-        # [N, 2]
-        gt_centers = (gt_bboxes[:, :2] + gt_bboxes[:, 2:]) * 0.5
         
-        # [1, M]
+        # Center sampling
+        center_radius = self.center_sampling_radius
+        gt_centers = (gt_bboxes[:, :2] + gt_bboxes[:, 2:]) * 0.5  # [N, 2]
+        
+        # [1, M] for broadcasting
         center_radius_ = center_radius * strides.unsqueeze(0)
 
-        gt_bboxes_l = gt_centers[:, 0].unsqueeze(1).repeat(1, num_anchors) - center_radius_ # x1
-        gt_bboxes_t = gt_centers[:, 1].unsqueeze(1).repeat(1, num_anchors) - center_radius_ # y1
-        gt_bboxes_r = gt_centers[:, 0].unsqueeze(1).repeat(1, num_anchors) + center_radius_ # x2
-        gt_bboxes_b = gt_centers[:, 1].unsqueeze(1).repeat(1, num_anchors) + center_radius_ # y2
+        # GT center coords: [N, 1] for broadcasting
+        gt_cx = gt_centers[:, 0:1]  # [N, 1]
+        gt_cy = gt_centers[:, 1:2]  # [N, 1]
 
-        c_l = x_centers - gt_bboxes_l
-        c_r = gt_bboxes_r - x_centers
-        c_t = y_centers - gt_bboxes_t
-        c_b = gt_bboxes_b - y_centers
-        center_deltas = torch.stack([c_l, c_t, c_r, c_b], 2)
+        # Broadcasting: [1, M] op [N, 1] -> [N, M]
+        c_l = x_centers - (gt_cx - center_radius_)
+        c_r = (gt_cx + center_radius_) - x_centers
+        c_t = y_centers - (gt_cy - center_radius_)
+        c_b = (gt_cy + center_radius_) - y_centers
+        center_deltas = torch.stack([c_l, c_t, c_r, c_b], 2)  # [N, M, 4]
+        
         is_in_centers = center_deltas.min(dim=-1).values > 0.0
         is_in_centers_all = is_in_centers.sum(dim=0) > 0
 
@@ -167,22 +166,38 @@ class SimOTA(object):
         num_gt, 
         fg_mask
         ):
-        # Dynamic K
+        # Dynamic K - OPTIMIZED: no CPU sync, no Python loop
         # ---------------------------------------------------------------
         matching_matrix = torch.zeros_like(cost, dtype=torch.uint8)
 
         ious_in_boxes_matrix = pair_wise_ious
         n_candidate_k = min(self.topk_candidate, ious_in_boxes_matrix.size(1))
         topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
-        dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
-        dynamic_ks = dynamic_ks.tolist()
-        for gt_idx in range(num_gt):
-            _, pos_idx = torch.topk(
-                cost[gt_idx], k=dynamic_ks[gt_idx], largest=False
-            )
-            matching_matrix[gt_idx][pos_idx] = 1
+        dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)  # [num_gt]
+        
+        # OPTIMIZED: Fully vectorized assignment - no CPU sync, no Python loop
+        # Use max_k for all GTs, then mask out excess matches
+        max_k = min(int(dynamic_ks.max()), n_candidate_k)  # Stay on GPU until int()
+        if max_k > 0 and cost.numel() > 0:
+            # Get top max_k indices for ALL GTs at once
+            _, topk_indices = torch.topk(cost, k=max_k, dim=1, largest=False)  # [num_gt, max_k]
+            
+            # Create mask for valid k values per GT: [num_gt, max_k]
+            k_range = torch.arange(max_k, device=cost.device).unsqueeze(0)  # [1, max_k]
+            valid_mask = k_range < dynamic_ks.unsqueeze(1)  # [num_gt, max_k]
+            
+            # Vectorized scatter using advanced indexing
+            # Create row indices matching the valid positions
+            gt_indices = torch.arange(num_gt, device=cost.device).unsqueeze(1).expand(-1, max_k)  # [num_gt, max_k]
+            
+            # Flatten and mask to get only valid assignments
+            valid_gt_idx = gt_indices[valid_mask]  # [num_valid]
+            valid_anchor_idx = topk_indices[valid_mask]  # [num_valid]
+            
+            # Single scatter operation for all assignments
+            matching_matrix[valid_gt_idx, valid_anchor_idx] = 1
 
-        del topk_ious, dynamic_ks, pos_idx
+        del topk_ious, dynamic_ks
 
         anchor_matching_gt = matching_matrix.sum(0)
         if (anchor_matching_gt > 1).sum() > 0:
