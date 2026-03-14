@@ -69,5 +69,23 @@
     1.18, 0.68, 50.0, 35.27, 3.18, 0.43, 3.81, 3.16, 18.34, 35.27,
     50.0, 50.0, 47.35, 50.0, 1.14, 28.01, 35.27, 1.99, 50.0, 4.3,
     23.18, 13.51, 50.0, 18.34, 50.0, 50.0
+  ],
+  
+  "num_objects": 36,
+  "object_names": [
+    "person", "bag", "bed", "blanket", "book", "box", "broom", "chair",
+    "closetcabinet", "clothes", "cupglassbottle", "dish", "door", "doorknob",
+    "doorway", "floor", "food", "groceries", "laptop", "light", "medicine",
+    "mirror", "papernotebook", "phonecamera", "picture", "pillow", "refrigerator",
+    "sandwich", "shelf", "shoe", "sofacouch", "table", "television", "towel",
+    "vacuum", "window"
+  ],
+  "object_class_weights_formula": "person=10.0 (HIGHEST), objects=sqrt(max_obj/count) capped at 25.0",
+  "object_class_weights_source": "Action Genome: person_bbox.pkl (288782), object_bbox_and_relationship.pkl",
+  "object_class_weights": [
+    10.0, 1.51, 1.65, 1.47, 1.36, 1.81, 2.19, 1.12, 20.93, 1.31,
+    20.93, 1.35, 1.47, 2.86, 1.55, 1.26, 1.01, 2.98, 1.64, 4.28,
+    3.07, 2.20, 20.93, 20.93, 2.82, 1.96, 2.91, 1.73, 1.80, 2.15,
+    20.93, 1.00, 3.01, 1.56, 3.40, 2.85
   ]
 }

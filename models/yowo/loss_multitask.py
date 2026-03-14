@@ -132,52 +132,14 @@ class MultiTaskCriterion(object):
         self.conf_pos_weight = conf_pos_weight
         print(f"  Confidence BCE: pos_weight=50 (FG/BG balance for ~100:1 ratio)")
         
-        # Object class weights - sqrt(max_count / class_count) from actual eval data
-        # Recalculated from E5 export: person=13528, table=2050, chair=1540, etc.
-        # Formula: sqrt(max_samples / class_samples), capped at 8.0
-        # max_samples = 13528 (person)
-        obj_class_weights = torch.tensor([
-            1.0,   # 0: person (13528 samples) - KEEP FULL WEIGHT (actions depend on person detection!)
-            6.98,  # 1: bag (278 samples)
-            4.18,  # 2: bed (775 samples)
-            5.29,  # 3: blanket (484 samples)
-            3.89,  # 4: book (893 samples)
-            7.14,  # 5: box (265 samples)
-            8.0,   # 6: broom (70 samples) - capped
-            2.96,  # 7: chair (1540 samples)
-            8.0,   # 8: closetcabinet (est ~50) - capped
-            6.08,  # 9: clothes (366 samples)
-            8.0,   # 10: cupglassbottle (est ~200)
-            4.59,  # 11: dish (642 samples)
-            4.35,  # 12: door (714 samples)
-            8.0,   # 13: doorknob (111 samples)
-            4.56,  # 14: doorway (651 samples)
-            5.40,  # 15: floor (464 samples)
-            3.29,  # 16: food (1249 samples)
-            8.0,   # 17: groceries (39 samples) - capped
-            4.64,  # 18: laptop (629 samples)
-            8.0,   # 19: light (2 samples) - capped
-            8.0,   # 20: medicine (68 samples) - capped
-            8.0,   # 21: mirror (181 samples)
-            8.0,   # 22: papernotebook (est ~100) - capped
-            8.0,   # 23: phonecamera (est ~150)
-            8.0,   # 24: picture (101 samples) - capped
-            8.0,   # 25: pillow (173 samples)
-            8.0,   # 26: refrigerator (113 samples)
-            6.45,  # 27: sandwich (325 samples)
-            8.0,   # 28: shelf (181 samples)
-            8.0,   # 29: shoe (149 samples)
-            8.0,   # 30: sofacouch (est ~200)
-            2.57,  # 31: table (2050 samples)
-            8.0,   # 32: television (178 samples)
-            8.0,   # 33: towel (163 samples)
-            8.0,   # 34: vacuum (151 samples)
-            8.0,   # 35: window (55 samples) - capped
-        ], dtype=torch.float32)
+        # Object class weights - loaded from config (like actions/relations)
+        # CRITICAL DESIGN:
+        # - Person = 10.0 (HIGHEST weight - actions depend on person!)
+        # - Objects = 1.0-8.0 (always BELOW person, balanced by frequency)
+        # ================================================================
+        # Note: smart_home_cfg loaded below with actions/relations
         self.register_buffer_fn = None  # Will move to device when needed
-        self.obj_class_weights = obj_class_weights
-        self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
-        print(f"  Using object class weights (rare classes upweighted 8-15x)")
+        self._num_objects = num_objects  # Store for later config loading
         
         # ================================================================
         # BCE LOSS FOR ACTIONS AND RELATIONS (no Focal Loss)
@@ -218,6 +180,21 @@ class MultiTaskCriterion(object):
             # Fallback: flat weight
             rel_pos_weight = torch.full((num_relations,), num_relations - 1.0, dtype=torch.float32)
             print(f"  Relation BCE: flat pos_weight={num_relations - 1.0} (fallback)")
+        
+        # OBJECT class weights: from actual Action Genome data
+        # Person = 30.0 (HIGHEST - actions depend on person!)
+        # Objects = 1.0-25.0 (always below person, balanced by frequency)
+        if 'object_class_weights' in smart_home_cfg and len(smart_home_cfg['object_class_weights']) == num_objects:
+            obj_class_weights = torch.tensor(smart_home_cfg['object_class_weights'], dtype=torch.float32)
+            print(f"  Object CE: per-class weights (person={obj_class_weights[0]:.1f} HIGHEST, others {obj_class_weights[1:].min():.1f}-{obj_class_weights[1:].max():.1f})")
+        else:
+            # Fallback: person=30.0, all others=1.0
+            obj_class_weights = torch.ones(num_objects, dtype=torch.float32)
+            obj_class_weights[0] = 30.0  # Person HIGHEST (above 25 cap)
+            print(f"  Object CE: fallback weights (person=30.0, others=1.0)")
+        
+        self.obj_class_weights = obj_class_weights
+        self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
         
         self.act_lossf = nn.BCEWithLogitsLoss(pos_weight=act_pos_weight, reduction='none')
         self.rel_lossf = nn.BCEWithLogitsLoss(pos_weight=rel_pos_weight, reduction='none')
