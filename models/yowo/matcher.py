@@ -55,8 +55,8 @@ class SimOTA(object):
             gt_cls = tgt_labels
 
         # OPTIMIZED: Use expand instead of repeat (no memory allocation)
-        # [N, C] -> [N, 1, C] -> [N, Mp, C] via broadcasting
-        gt_cls = gt_cls.float().unsqueeze(1)  # [N, 1, C]
+        # [N, C] -> [N, Mp, C] via expand (memory-efficient, no copy)
+        gt_cls = gt_cls.float().unsqueeze(1).expand(-1, num_in_boxes_anchor, -1)  # [N, Mp, C]
 
         with torch.amp.autocast(device_type='cuda', enabled=False):
             # Use expand for broadcasting (memory-efficient, no copy)
