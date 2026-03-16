@@ -395,9 +395,15 @@ class MultiTaskCriterion(object):
         # ================================================================
         # ACTION LOSS (BCE with per-class pos_weight, PERSON-ONLY)
         # ================================================================
-        # pos_weight from config handles pos/neg balance (no double-counting)
-        # Per-class mean prevents easy classes from dominating
-        # Gap loss only for HARD negatives (>0.2 probability)
+        # Key fixes:
+        # 1. Per-class mean so each class contributes equally
+        # 2. Per-class SCALING: rare classes get higher weight (sqrt of imbalance)
+        # 3. Gap loss with LOW threshold (0.05) so hard classes get gradient
+        # 4. HIGH gap weight (1.5) to force decisiveness
+        # 
+        # NOTE: The main fix for stagnant actions (running, standing up, etc.) is
+        # the DIRECT TEMPORAL PATHWAY in yowo_multitask.py which bypasses the
+        # cascade to preserve 3D motion features critical for motion-based actions.
         # ================================================================
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0:
@@ -407,29 +413,41 @@ class MultiTaskCriterion(object):
                 # BCE loss with per-class pos_weight (handles pos/neg balance)
                 bce_loss = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
                 
+                # ============================================================
+                # PER-CLASS SCALING: Rare classes get HIGHER loss weight
+                # ============================================================
+                # pos_weight tells us imbalance: high pos_weight = rare class
+                # Scale loss by sqrt(pos_weight) so rare classes matter MORE
+                # This is ON TOP of pos_weight which only balances pos/neg
+                # ============================================================
+                if hasattr(self, 'act_lossf') and hasattr(self.act_lossf, 'pos_weight'):
+                    pos_weights = self.act_lossf.pos_weight  # [num_actions]
+                    # sqrt scaling: pos_weight=50 -> scale=7.07, pos_weight=4 -> scale=2
+                    class_scales = torch.sqrt(pos_weights).clamp(min=1.0, max=10.0)
+                    # Apply per-class scaling: [N, C] * [C] -> [N, C]
+                    bce_loss = bce_loss * class_scales.unsqueeze(0)
+                
                 # Per-class mean, then sum over classes
-                # - mean(dim=0): each class contributes equally (prevents easy classes dominating)
-                # - sum(): maintains gradient magnitude
-                # - pos_weight already handles pos/neg balance, NO separate averaging needed
                 loss_act = bce_loss.mean(dim=0).sum()
                 
                 # ============================================================
-                # DECISIVE GAP LOSS (HARD NEGATIVES ONLY)
+                # AGGRESSIVE GAP LOSS (LOW threshold, HIGH weight)
                 # ============================================================
-                # Push positives above 0.5
-                # Push ONLY hard negatives (>0.2 prob) below 0.1
-                # This focuses gradient on confusing false positives, not easy negatives
+                # Push positives above 0.5 (logit > 0)
+                # Push negatives with prob > 0.05 below 0.1 (catches MORE FPs)
+                # Weight 1.5 to FORCE the model to be decisive
                 # ============================================================
                 pos_mask = person_act_targets > 0.5
                 neg_mask = ~pos_mask
                 probs = torch.sigmoid(person_act_preds)
                 
-                # HARD negatives: negatives scoring above 0.2 probability (confusing FPs)
-                hard_neg_mask = neg_mask & (probs > 0.2)
+                # LOW threshold: catch negatives scoring above just 0.05 probability
+                # This means even weak false positives get pushed down
+                hard_neg_mask = neg_mask & (probs > 0.05)
                 
                 # Thresholds
                 pos_logit_thresh = 0.0    # sigmoid(0) = 0.5 - positives MUST exceed this
-                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1 - hard negatives below this
+                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1 - negatives below this
                 
                 # Hinge losses
                 pos_hinge = F.relu(pos_logit_thresh - person_act_preds) * pos_mask.float()
@@ -440,8 +458,8 @@ class MultiTaskCriterion(object):
                 num_hard_neg = hard_neg_mask.float().sum().clamp(1)
                 act_gap_loss = pos_hinge.sum() / num_pos + neg_hinge.sum() / num_hard_neg
                 
-                # Decisive weight (0.5 - balanced but meaningful)
-                loss_act = loss_act + 0.5 * act_gap_loss
+                # HIGH gap weight (1.5) - force decisiveness
+                loss_act = loss_act + 1.5 * act_gap_loss
             else:
                 loss_act = torch.tensor(0.0, device=device)
         else:
@@ -450,23 +468,30 @@ class MultiTaskCriterion(object):
         # ================================================================
         # RELATION LOSS (BCE with per-class pos_weight)
         # ================================================================
-        # pos_weight from config handles pos/neg balance (no double-counting)
-        # Per-class mean prevents easy relations from dominating
-        # Gap loss only for HARD negatives (>0.2 probability)
+        # Same aggressive treatment as actions:
+        # - Per-class scaling by sqrt(pos_weight)
+        # - Low gap threshold (0.05)
+        # - Higher gap weight (0.8)
         # ================================================================
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
             # BCE loss with per-class pos_weight (handles pos/neg balance)
             rel_bce_loss = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
             
-            # Per-class mean, then sum over classes (same as actions)
+            # Per-class scaling for rare relations
+            if hasattr(self, 'rel_lossf') and hasattr(self.rel_lossf, 'pos_weight'):
+                rel_pos_weights = self.rel_lossf.pos_weight
+                rel_class_scales = torch.sqrt(rel_pos_weights).clamp(min=1.0, max=10.0)
+                rel_bce_loss = rel_bce_loss * rel_class_scales.unsqueeze(0)
+            
+            # Per-class mean, then sum over classes
             loss_rel = rel_bce_loss.mean(dim=0).sum()
             
-            # Gap loss for hard negatives only
+            # Gap loss with LOW threshold
             rel_pos_mask = rel_targets > 0.5
             rel_neg_mask = ~rel_pos_mask
             rel_probs = torch.sigmoid(matched_rel_preds)
-            hard_rel_neg_mask = rel_neg_mask & (rel_probs > 0.2)
+            hard_rel_neg_mask = rel_neg_mask & (rel_probs > 0.05)  # LOW threshold
             
             rel_pos_hinge = F.relu(0.0 - matched_rel_preds) * rel_pos_mask.float()
             rel_neg_hinge = F.relu(matched_rel_preds - (-2.2)) * hard_rel_neg_mask.float()
@@ -475,8 +500,8 @@ class MultiTaskCriterion(object):
             num_hard_rel_neg = hard_rel_neg_mask.float().sum().clamp(1)
             rel_gap_loss = rel_pos_hinge.sum() / num_rel_pos + rel_neg_hinge.sum() / num_hard_rel_neg
             
-            # Relations are secondary task (weight 0.3)
-            loss_rel = loss_rel + 0.3 * rel_gap_loss
+            # Higher gap weight for relations too (0.8)
+            loss_rel = loss_rel + 0.8 * rel_gap_loss
         else:
             loss_rel = torch.tensor(0.0, device=device)
 

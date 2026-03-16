@@ -380,7 +380,34 @@ class YOWOMultiTaskV2(nn.Module):
         # 3. Action Head
         self.act_preds = nn.ModuleList(
             [nn.Conv2d(head_dim, num_actions, kernel_size=1)
-                for _ in range(len(cfg['stride']))]) 
+                for _ in range(len(cfg['stride']))])
+        
+        # ==================== DIRECT TEMPORAL ACTION PATH ====================
+        # HYPOTHESIS: The cascade (obj_ctx → rel_ctx) dilutes temporal features
+        # that are CRITICAL for motion-based actions like "running", "standing up"
+        # 
+        # FIX: Add a DIRECT pathway from 3D features to action prediction
+        # This bypasses the cascade entirely for temporal-dependent actions
+        # Final action logits = cascade_logits + temporal_logits (learned weighting)
+        # =====================================================================
+        self.use_temporal_action_path = True
+        if self.use_temporal_action_path:
+            bk_dim_3d = 2048  # ResNeXt101 output dimension
+            self.temporal_action_proj = nn.Sequential(
+                nn.Conv2d(bk_dim_3d, head_dim, kernel_size=1),
+                nn.GroupNorm(32, head_dim),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(head_dim, head_dim, kernel_size=3, padding=1),
+                nn.GroupNorm(32, head_dim),
+                nn.SiLU(inplace=True),
+            )
+            self.temporal_action_preds = nn.ModuleList(
+                [nn.Conv2d(head_dim, num_actions, kernel_size=1)
+                    for _ in range(len(cfg['stride']))])
+            # Learnable weight to balance cascade vs temporal path
+            # Initialize slightly positive to encourage using temporal features
+            self.temporal_action_weight = nn.Parameter(torch.tensor(0.5))
+            print("  ✅ Direct Temporal Action Path ENABLED (bypasses cascade for motion actions)") 
         
         # Box regression
         self.reg_preds = nn.ModuleList(
@@ -416,7 +443,11 @@ class YOWOMultiTaskV2(nn.Module):
         bias_value = -torch.log(torch.tensor((1. - init_prob) / init_prob))
         
         # BCE-based heads: conf, act, rel (use low init prob to prevent background over-prediction)
-        for pred_list in [self.conf_preds, self.rel_preds, self.act_preds]:
+        pred_lists = [self.conf_preds, self.rel_preds, self.act_preds]
+        # Add temporal action preds if they exist
+        if hasattr(self, 'temporal_action_preds'):
+            pred_lists.append(self.temporal_action_preds)
+        for pred_list in pred_lists:
             for pred in pred_list:
                 b = pred.bias.view(1, -1)
                 b.data.fill_(bias_value.item())
@@ -494,7 +525,20 @@ class YOWOMultiTaskV2(nn.Module):
         # 3. Action prediction (features enriched with object + relation context)
         # KEY: starts from rel_feat (already has object context), NOT cls_feat
         act_feat = rel_ctx(rel_feat, obj_logits, rel_logits, conf_logits)
-        act_logits = act_pred(act_feat)
+        cascade_act_logits = act_pred(act_feat)
+        
+        # ===== DIRECT TEMPORAL PATH FOR ACTIONS =====
+        # Add logits from 3D features directly (bypasses cascade)
+        # This helps motion-based actions like running, standing up
+        if hasattr(self, 'use_temporal_action_path') and self.use_temporal_action_path:
+            temporal_feat = self.temporal_action_proj(feat_3d_up)
+            temporal_act_logits = self.temporal_action_preds[level](temporal_feat)
+            # Combine: cascade + weighted temporal
+            # sigmoid(weight) ensures weight is in [0, 1] range
+            w = torch.sigmoid(self.temporal_action_weight)
+            act_logits = cascade_act_logits + w * temporal_act_logits
+        else:
+            act_logits = cascade_act_logits
         
         # Box regression
         reg_output = reg_pred(reg_feat)
