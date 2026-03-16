@@ -11,3 +11,5 @@ det_results
 *.jpg
 *.onnx
 *.engine
+*.md
+*.cache

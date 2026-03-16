@@ -24,6 +24,63 @@ from utils.box_ops import get_ious
 from utils.distributed_utils import get_world_size, is_dist_avail_and_initialized
 
 
+class SoftmaxFocalLoss(nn.Module):
+    """
+    Focal Loss for MULTI-CLASS (exclusive) classification with softmax.
+    
+    ROOT CAUSE FIX: CrossEntropyLoss optimizes for overall accuracy,
+    so predicting the most common class (person=100% of frames) is optimal.
+    Focal Loss down-weights easy examples (person predictions with high conf)
+    and up-weights hard examples (rare objects like bed, laptop).
+    
+    Formula: FL = -alpha * (1 - p_t)^gamma * log(p_t)
+    where p_t is the probability of the TRUE class.
+    
+    Args:
+        gamma: Focusing parameter (default 2.0)
+               Higher gamma = more focus on hard examples
+        weight: Per-class weights (optional)
+    """
+    def __init__(self, gamma=2.0, weight=None, reduction='none'):
+        super().__init__()
+        self.gamma = gamma
+        self.weight = weight
+        self.reduction = reduction
+
+    def forward(self, logits, targets):
+        """
+        Args:
+            logits: [N, C] - raw predictions (before softmax)
+            targets: [N] - target class indices (long tensor)
+        Returns:
+            loss: [N] - focal loss per sample
+        """
+        # Get probabilities via softmax
+        probs = F.softmax(logits, dim=-1)
+        
+        # Get probability of correct class: p_t = probs[target_class]
+        # targets is [N], probs is [N, C]
+        p_t = probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
+        
+        # Focal weight: (1 - p_t)^gamma
+        # High p_t (easy, e.g., person) -> low weight
+        # Low p_t (hard, e.g., rare objects) -> high weight
+        focal_weight = (1.0 - p_t) ** self.gamma
+        
+        # CrossEntropy loss: -log(p_t)
+        ce_loss = F.cross_entropy(logits, targets, weight=self.weight, reduction='none')
+        
+        # Apply focal weight
+        loss = focal_weight * ce_loss
+        
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
+
+
 class SigmoidFocalLoss(nn.Module):
     """
     Focal Loss for multi-label classification (BCE-based).
@@ -194,7 +251,12 @@ class MultiTaskCriterion(object):
             print(f"  Object CE: fallback weights (person=30.0, others=1.0)")
         
         self.obj_class_weights = obj_class_weights
-        self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none')
+        # ROOT CAUSE FIX: Use Focal Loss for objects instead of CrossEntropy
+        # CrossEntropy optimizes for accuracy -> always predicts person (most common)
+        # Focal Loss down-weights easy examples (person) and focuses on hard ones (rare objects)
+        # gamma=2.0 is standard, higher = more aggressive down-weighting of easy examples
+        self.obj_lossf = SoftmaxFocalLoss(gamma=2.0, weight=obj_class_weights, reduction='none')
+        print(f"  Object loss: SoftmaxFocalLoss (gamma=2.0) - fixes person dominance")
         
         self.act_lossf = nn.BCEWithLogitsLoss(pos_weight=act_pos_weight, reduction='none')
         self.rel_lossf = nn.BCEWithLogitsLoss(pos_weight=rel_pos_weight, reduction='none')
@@ -252,7 +314,7 @@ class MultiTaskCriterion(object):
         self.conf_lossf.pos_weight = self.conf_pos_weight
         
         self.obj_class_weights = self.obj_class_weights.to(device)
-        self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none')
+        self.obj_lossf = SoftmaxFocalLoss(gamma=2.0, weight=self.obj_class_weights, reduction='none')
         
         self.act_pos_weight = self.act_pos_weight.to(device)
         self.act_lossf.pos_weight = self.act_pos_weight

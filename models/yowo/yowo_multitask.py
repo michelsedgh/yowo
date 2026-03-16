@@ -388,7 +388,9 @@ class YOWOMultiTaskV2(nn.Module):
         # 
         # FIX: Add a DIRECT pathway from 3D features to action prediction
         # This bypasses the cascade entirely for temporal-dependent actions
-        # Final action logits = cascade_logits + temporal_logits (learned weighting)
+        # 
+        # PER-CLASS WEIGHTS: Motion actions (running, walking, standing up) use
+        # temporal path MORE, while context actions (cooking, holding) use cascade MORE
         # =====================================================================
         self.use_temporal_action_path = True
         if self.use_temporal_action_path:
@@ -404,10 +406,30 @@ class YOWOMultiTaskV2(nn.Module):
             self.temporal_action_preds = nn.ModuleList(
                 [nn.Conv2d(head_dim, num_actions, kernel_size=1)
                     for _ in range(len(cfg['stride']))])
-            # Learnable weight to balance cascade vs temporal path
-            # Initialize slightly positive to encourage using temporal features
-            self.temporal_action_weight = nn.Parameter(torch.tensor(0.5))
-            print("  ✅ Direct Temporal Action Path ENABLED (bypasses cascade for motion actions)") 
+            
+            # PER-CLASS temporal weights: motion actions get HIGHER weight
+            # Smart Home action indices (0-indexed):
+            # Motion-heavy (need temporal): running(20), walking(23), standing_up(21), 
+            #   going_to_sit(22), dressing(6), undressing(32), putting_shoes(18), 
+            #   taking_shoes(29), awakening(0), lying_down(12)
+            # Context-heavy (need cascade): cooking(4), holding_food(9), holding_cup(8),
+            #   drinking(7), eating(19), taking_food(28), working_laptop(34)
+            temporal_weights = torch.ones(num_actions) * 0.3  # Default: 30% temporal
+            
+            # Motion actions: 70% temporal weight
+            motion_actions = [0, 6, 12, 18, 20, 21, 22, 23, 29, 32]  # awakening, dressing, lying, shoes, running, standup, sit, walk, shoes, undress
+            for idx in motion_actions:
+                if idx < num_actions:
+                    temporal_weights[idx] = 0.7
+            
+            # Context actions: 10% temporal weight (rely on cascade)
+            context_actions = [4, 7, 8, 9, 19, 28, 34]  # cooking, drinking, holding_cup, holding_food, eating, taking_food, working_laptop
+            for idx in context_actions:
+                if idx < num_actions:
+                    temporal_weights[idx] = 0.1
+            
+            self.temporal_action_weights = nn.Parameter(temporal_weights)
+            print(f"  ✅ Direct Temporal Action Path ENABLED (per-class weights: motion=0.7, context=0.1, default=0.3)") 
         
         # Box regression
         self.reg_preds = nn.ModuleList(
@@ -533,10 +555,12 @@ class YOWOMultiTaskV2(nn.Module):
         if hasattr(self, 'use_temporal_action_path') and self.use_temporal_action_path:
             temporal_feat = self.temporal_action_proj(feat_3d_up)
             temporal_act_logits = self.temporal_action_preds[level](temporal_feat)
-            # Combine: cascade + weighted temporal
-            # sigmoid(weight) ensures weight is in [0, 1] range
-            w = torch.sigmoid(self.temporal_action_weight)
-            act_logits = cascade_act_logits + w * temporal_act_logits
+            # PER-CLASS weighted combination: cascade + w[c] * temporal
+            # Motion actions (running, walking) get high w, context actions (cooking) get low w
+            # Weights are clamped to [0, 1] via sigmoid
+            w = torch.sigmoid(self.temporal_action_weights)  # [num_actions]
+            # Broadcast: [B, C, H, W] * [C, 1, 1] -> [B, C, H, W]
+            act_logits = cascade_act_logits + w.view(1, -1, 1, 1) * temporal_act_logits
         else:
             act_logits = cascade_act_logits
         
@@ -666,7 +690,21 @@ class YOWOMultiTaskV2(nn.Module):
 
 
     def post_process_nms_free(self, conf_preds, cls_preds, reg_preds, anchors):
-        """NMS-free post-processing for O2O head."""
+        """
+        TRUE NMS-free post-processing for O2O head (YOLOv10/YOLO26 design).
+        
+        O2O is trained with one-to-one matching: each GT gets exactly 1 positive anchor.
+        The model LEARNS to output only one confident prediction per object.
+        NO NMS should be applied - that defeats the purpose of O2O training.
+        
+        At early training (epoch 1-3), the model outputs many boxes because
+        the confidence head hasn't learned to be selective yet. This is EXPECTED.
+        As training progresses, the model learns to suppress duplicate predictions.
+        
+        Key insight from YOLOv10 paper: "During inference, we discard the one-to-many
+        head and utilize the one-to-one head to make predictions. This enables YOLOs
+        for the end-to-end deployment without incurring any additional inference cost."
+        """
         all_conf = []
         all_cls = []
         all_box = []
@@ -677,6 +715,8 @@ class YOWOMultiTaskV2(nn.Module):
             box_i = self.decode_boxes(anc_i, reg_i, self.stride[level])
             conf_i = torch.sigmoid(conf_i.squeeze(-1))
             
+            # O2O should output fewer, higher-quality predictions
+            # Use the configured threshold - model learns to be selective
             k = min(self.topk, conf_i.shape[0])
             topk_conf, topk_idx = torch.topk(conf_i, k)
             topk_cls = cls_i[topk_idx]
@@ -697,6 +737,9 @@ class YOWOMultiTaskV2(nn.Module):
         scores = conf.cpu().numpy()
         labels = cls.cpu().numpy()
         bboxes = box.cpu().numpy()
+        
+        # NO NMS - this is the whole point of O2O training!
+        # The model learns to output clean predictions without post-processing.
         
         return np.concatenate([bboxes, scores[..., None], labels], axis=-1)
 
