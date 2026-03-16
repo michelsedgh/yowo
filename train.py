@@ -68,6 +68,8 @@ def parse_args():
                         help='max epoch.')
     parser.add_argument('--lr_epoch', nargs='+', default=[2,3,4], type=int,
                         help='lr epoch to decay')
+    parser.add_argument('--cosine_lr', action='store_true', default=False,
+                        help='Use CosineAnnealingWarmRestarts instead of MultiStepLR. Better for learning hard classes.')
 
     # Model
     parser.add_argument('-v', '--version', default='yowo_v2_tiny', type=str,
@@ -230,13 +232,23 @@ def train():
     optimizer, start_epoch = build_optimizer(d_cfg, model_without_ddp, base_lr, args.resume)
 
     # lr scheduler
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.lr_epoch, args.lr_decay_ratio)
+    if args.cosine_lr:
+        # CosineAnnealingWarmRestarts: better for learning hard classes
+        # T_0=5: restart every 5 epochs (gives hard classes fresh gradient signal)
+        # eta_min=1e-6: minimum LR to prevent complete stagnation
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=5, T_mult=1, eta_min=1e-6
+        )
+        print(f'📈 Using CosineAnnealingWarmRestarts (T_0=5, eta_min=1e-6)')
+    else:
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.lr_epoch, args.lr_decay_ratio)
     
     # Load or advance LR scheduler if resuming from checkpoint
     if start_epoch > 0 and args.resume is not None:
         checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
         restored = False
-        if 'lr_scheduler' in checkpoint:
+        if 'lr_scheduler' in checkpoint and not args.cosine_lr:
+            # Only restore MultiStepLR state (cosine LR is stateless enough to skip)
             saved_milestones = checkpoint['lr_scheduler'].get('milestones', None)
             # Only restore saved state if milestones match exactly (same training run)
             # If milestones differ, the user changed lr_epoch, so we must NOT load the

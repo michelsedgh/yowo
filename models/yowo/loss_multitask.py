@@ -395,43 +395,53 @@ class MultiTaskCriterion(object):
         # ================================================================
         # ACTION LOSS (BCE with per-class pos_weight, PERSON-ONLY)
         # ================================================================
+        # pos_weight from config handles pos/neg balance (no double-counting)
+        # Per-class mean prevents easy classes from dominating
+        # Gap loss only for HARD negatives (>0.2 probability)
+        # ================================================================
         matched_act_preds = act_preds.view(-1, self.num_actions)[fg_masks]
         if len(act_targets) > 0:
             person_act_preds = matched_act_preds[is_person_masks]
             person_act_targets = act_targets[is_person_masks]
             if person_act_preds.shape[0] > 0:
-                # BCE loss with per-class pos_weight handles gradient imbalance
-                loss_act = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
+                # BCE loss with per-class pos_weight (handles pos/neg balance)
+                bce_loss = self.act_lossf(person_act_preds, person_act_targets)  # [N, C]
                 
-                # Normalize by PERSON fg count (not all boxes)
-                num_person_fg = max(person_act_preds.shape[0], 1)
-                loss_act = loss_act.sum() / num_person_fg
+                # Per-class mean, then sum over classes
+                # - mean(dim=0): each class contributes equally (prevents easy classes dominating)
+                # - sum(): maintains gradient magnitude
+                # - pos_weight already handles pos/neg balance, NO separate averaging needed
+                loss_act = bce_loss.mean(dim=0).sum()
                 
                 # ============================================================
-                # AGGRESSIVE DECISIVENESS LOSS
+                # DECISIVE GAP LOSS (HARD NEGATIVES ONLY)
                 # ============================================================
-                # Force model to COMMIT: positives MUST predict > 0.5, negatives < 0.1
-                # This prevents lazy predictions stuck in the middle (0.2-0.4 range)
-                # Weight = 1.5 to push hard
+                # Push positives above 0.5
+                # Push ONLY hard negatives (>0.2 prob) below 0.1
+                # This focuses gradient on confusing false positives, not easy negatives
                 # ============================================================
                 pos_mask = person_act_targets > 0.5
                 neg_mask = ~pos_mask
+                probs = torch.sigmoid(person_act_preds)
                 
-                # AGGRESSIVE thresholds
+                # HARD negatives: negatives scoring above 0.2 probability (confusing FPs)
+                hard_neg_mask = neg_mask & (probs > 0.2)
+                
+                # Thresholds
                 pos_logit_thresh = 0.0    # sigmoid(0) = 0.5 - positives MUST exceed this
-                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1 - negatives MUST be below this
+                neg_logit_thresh = -2.2   # sigmoid(-2.2) ≈ 0.1 - hard negatives below this
                 
-                # Hinge losses: penalize when not meeting threshold
+                # Hinge losses
                 pos_hinge = F.relu(pos_logit_thresh - person_act_preds) * pos_mask.float()
-                neg_hinge = F.relu(person_act_preds - neg_logit_thresh) * neg_mask.float()
+                neg_hinge = F.relu(person_act_preds - neg_logit_thresh) * hard_neg_mask.float()
                 
-                # Normalize separately so 33x negatives don't overwhelm positives
+                # Normalize separately
                 num_pos = pos_mask.float().sum().clamp(1)
-                num_neg = neg_mask.float().sum().clamp(1)
-                act_gap_loss = pos_hinge.sum() / num_pos + neg_hinge.sum() / num_neg
+                num_hard_neg = hard_neg_mask.float().sum().clamp(1)
+                act_gap_loss = pos_hinge.sum() / num_pos + neg_hinge.sum() / num_hard_neg
                 
-                # AGGRESSIVE weight = 1.5 to push model hard
-                loss_act = loss_act + 1.5 * act_gap_loss
+                # Decisive weight (0.5 - balanced but meaningful)
+                loss_act = loss_act + 0.5 * act_gap_loss
             else:
                 loss_act = torch.tensor(0.0, device=device)
         else:
@@ -440,26 +450,33 @@ class MultiTaskCriterion(object):
         # ================================================================
         # RELATION LOSS (BCE with per-class pos_weight)
         # ================================================================
+        # pos_weight from config handles pos/neg balance (no double-counting)
+        # Per-class mean prevents easy relations from dominating
+        # Gap loss only for HARD negatives (>0.2 probability)
+        # ================================================================
         matched_rel_preds = rel_preds.view(-1, self.num_relations)[fg_masks]
         if len(rel_targets) > 0:
-            # BCE loss with per-class pos_weight
-            loss_rel = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
-            loss_rel = loss_rel.sum() / num_fg
+            # BCE loss with per-class pos_weight (handles pos/neg balance)
+            rel_bce_loss = self.rel_lossf(matched_rel_preds, rel_targets)  # [N, C]
             
-            # AGGRESSIVE decisiveness loss for relations (same as actions)
+            # Per-class mean, then sum over classes (same as actions)
+            loss_rel = rel_bce_loss.mean(dim=0).sum()
+            
+            # Gap loss for hard negatives only
             rel_pos_mask = rel_targets > 0.5
             rel_neg_mask = ~rel_pos_mask
+            rel_probs = torch.sigmoid(matched_rel_preds)
+            hard_rel_neg_mask = rel_neg_mask & (rel_probs > 0.2)
             
-            # Same aggressive thresholds
             rel_pos_hinge = F.relu(0.0 - matched_rel_preds) * rel_pos_mask.float()
-            rel_neg_hinge = F.relu(matched_rel_preds - (-2.2)) * rel_neg_mask.float()
+            rel_neg_hinge = F.relu(matched_rel_preds - (-2.2)) * hard_rel_neg_mask.float()
             
             num_rel_pos = rel_pos_mask.float().sum().clamp(1)
-            num_rel_neg = rel_neg_mask.float().sum().clamp(1)
-            rel_gap_loss = rel_pos_hinge.sum() / num_rel_pos + rel_neg_hinge.sum() / num_rel_neg
+            num_hard_rel_neg = hard_rel_neg_mask.float().sum().clamp(1)
+            rel_gap_loss = rel_pos_hinge.sum() / num_rel_pos + rel_neg_hinge.sum() / num_hard_rel_neg
             
-            # Slightly lower weight for relations (1.0) since they're secondary task
-            loss_rel = loss_rel + 1.0 * rel_gap_loss
+            # Relations are secondary task (weight 0.3)
+            loss_rel = loss_rel + 0.3 * rel_gap_loss
         else:
             loss_rel = torch.tensor(0.0, device=device)
 
