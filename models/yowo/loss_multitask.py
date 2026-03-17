@@ -251,12 +251,12 @@ class MultiTaskCriterion(object):
             print(f"  Object CE: fallback weights (person=30.0, others=1.0)")
         
         self.obj_class_weights = obj_class_weights
-        # ROOT CAUSE FIX: Use Focal Loss for objects instead of CrossEntropy
-        # CrossEntropy optimizes for accuracy -> always predicts person (most common)
-        # Focal Loss down-weights easy examples (person) and focuses on hard ones (rare objects)
-        # gamma=2.0 is standard, higher = more aggressive down-weighting of easy examples
-        self.obj_lossf = SoftmaxFocalLoss(gamma=2.0, weight=obj_class_weights, reduction='none')
-        print(f"  Object loss: SoftmaxFocalLoss (gamma=2.0) - fixes person dominance")
+        # Use CrossEntropyLoss with class weights (NOT Focal Loss!)
+        # Focal Loss was collapsing object loss to ~7 while action loss stayed at ~500
+        # This 70x gradient imbalance meant objects weren't learning at all
+        # Class weights handle rare objects; loss weight handles magnitude balance
+        self.obj_lossf = nn.CrossEntropyLoss(weight=obj_class_weights, reduction='none', label_smoothing=0.1)
+        print(f"  Object loss: CrossEntropyLoss with class weights + label_smoothing=0.1")
         
         self.act_lossf = nn.BCEWithLogitsLoss(pos_weight=act_pos_weight, reduction='none')
         self.rel_lossf = nn.BCEWithLogitsLoss(pos_weight=rel_pos_weight, reduction='none')
@@ -314,7 +314,7 @@ class MultiTaskCriterion(object):
         self.conf_lossf.pos_weight = self.conf_pos_weight
         
         self.obj_class_weights = self.obj_class_weights.to(device)
-        self.obj_lossf = SoftmaxFocalLoss(gamma=2.0, weight=self.obj_class_weights, reduction='none')
+        self.obj_lossf = nn.CrossEntropyLoss(weight=self.obj_class_weights, reduction='none', label_smoothing=0.1)
         
         self.act_pos_weight = self.act_pos_weight.to(device)
         self.act_lossf.pos_weight = self.act_pos_weight
@@ -578,13 +578,17 @@ class MultiTaskCriterion(object):
         # ================================================================
         # FINAL LOSS WEIGHTING
         # ================================================================
-        # Actions are the PRIMARY task - weight 1.5 to push learning
-        # Relations are SECONDARY - weight 0.5
-        # Objects use CrossEntropy with class weights - weight 1.0
+        # CRITICAL: Balance loss magnitudes so all tasks get gradients!
+        # Training logs showed: obj_loss~7, act_loss~500, rel_loss~300
+        # Without weighting, object gradients were 70x smaller than actions
+        # 
+        # obj_weight = 30.0 brings object loss to ~210 (same magnitude as others)
+        # This ensures the optimizer actually updates object head weights
         # ================================================================
-        act_weight = 1.5  # Actions are primary task, push hard
-        rel_weight = 0.5  # Relations are secondary
-        loss_cls = loss_obj + act_weight * loss_act + rel_weight * loss_rel
+        obj_weight = 30.0  # CRITICAL: boost object loss to match action magnitude
+        act_weight = 1.5   # Actions are primary task
+        rel_weight = 0.5   # Relations are secondary
+        loss_cls = obj_weight * loss_obj + act_weight * loss_act + rel_weight * loss_rel
         losses = (
             self.loss_conf_weight * loss_conf +
             self.loss_cls_weight * loss_cls +
