@@ -414,7 +414,7 @@ class MultiTaskCriterion(object):
                 num_anchors = sum([ab.shape[0] for ab in anchors])
                 conf_target = conf_preds.new_zeros((num_anchors, 1))
                 # Foreground anchors get IoU as target (quality-aware)
-                conf_target[fg_mask] = pred_ious.unsqueeze(-1)
+                conf_target[fg_mask] = pred_ious.unsqueeze(-1).to(conf_target.dtype)
                 
                 box_target = tgt_bboxes_scaled[matched_gt_inds]
                 
