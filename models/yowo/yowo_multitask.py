@@ -409,24 +409,31 @@ class YOWOMultiTaskV2(nn.Module):
             
             # PER-CLASS temporal weights: motion actions get HIGHER weight
             # Smart Home action indices (0-indexed):
-            # Motion-heavy (need temporal): running(20), walking(23), standing_up(21), 
-            #   going_to_sit(22), dressing(6), undressing(32), putting_shoes(18), 
-            #   taking_shoes(29), awakening(0), lying_down(12)
-            # Context-heavy (need cascade): cooking(4), holding_food(9), holding_cup(8),
-            #   drinking(7), eating(19), taking_food(28), working_laptop(34)
-            temporal_weights = torch.ones(num_actions) * 0.3  # Default: 30% temporal
+            # Motion-heavy (need temporal): running(29), walking(16), standing_up(32), 
+            #   going_to_sit(30), dressing(28), undressing(33), putting_shoes(10), 
+            #   taking_shoes(11), awakening(24), lying_down(20)
+            # Context-heavy (need cascade): cooking(27), holding_food(13), holding_cup(18),
+            #   drinking(17), eating(34), taking_food(14), working_laptop(9)
+            #
+            # FIXED: Use INVERSE SIGMOID so sigmoid(w) gives intended weights!
+            # inv_sigmoid(p) = log(p / (1-p))
+            # inv_sigmoid(0.7) = 0.847, inv_sigmoid(0.3) = -0.847, inv_sigmoid(0.1) = -2.197
+            default_w = -0.847  # sigmoid(-0.847) = 0.3 = 30% temporal
+            temporal_weights = torch.ones(num_actions) * default_w
             
             # Motion actions: 70% temporal weight
-            motion_actions = [0, 6, 12, 18, 20, 21, 22, 23, 29, 32]  # awakening, dressing, lying, shoes, running, standup, sit, walk, shoes, undress
+            motion_w = 0.847  # sigmoid(0.847) = 0.7
+            motion_actions = [10, 11, 16, 20, 24, 28, 29, 30, 32, 33]  # shoes, walk, lying, awaken, dress, run, sit, standup, undress
             for idx in motion_actions:
                 if idx < num_actions:
-                    temporal_weights[idx] = 0.7
+                    temporal_weights[idx] = motion_w
             
-            # Context actions: 10% temporal weight (rely on cascade)
-            context_actions = [4, 7, 8, 9, 19, 28, 34]  # cooking, drinking, holding_cup, holding_food, eating, taking_food, working_laptop
+            # Context actions: 10% temporal weight (rely on cascade for object context)
+            context_w = -2.197  # sigmoid(-2.197) = 0.1
+            context_actions = [9, 13, 14, 17, 18, 27, 34]  # working_laptop, holding_food, taking_food, drinking, holding_cup, cooking, eating
             for idx in context_actions:
                 if idx < num_actions:
-                    temporal_weights[idx] = 0.1
+                    temporal_weights[idx] = context_w
             
             self.temporal_action_weights = nn.Parameter(temporal_weights)
             print(f"  ✅ Direct Temporal Action Path ENABLED (per-class weights: motion=0.7, context=0.1, default=0.3)") 
@@ -559,8 +566,12 @@ class YOWOMultiTaskV2(nn.Module):
             # Motion actions (running, walking) get high w, context actions (cooking) get low w
             # Weights are clamped to [0, 1] via sigmoid
             w = torch.sigmoid(self.temporal_action_weights)  # [num_actions]
-            # Broadcast: [B, C, H, W] * [C, 1, 1] -> [B, C, H, W]
-            act_logits = cascade_act_logits + w.view(1, -1, 1, 1) * temporal_act_logits
+            # FIXED: Use weighted interpolation, not addition!
+            # cascade provides object context, temporal provides motion
+            # w=0.7 means 70% temporal + 30% cascade (for motion actions)
+            # w=0.1 means 10% temporal + 90% cascade (for context actions)
+            w = w.view(1, -1, 1, 1)  # [1, C, 1, 1] for broadcasting
+            act_logits = (1.0 - w) * cascade_act_logits + w * temporal_act_logits
         else:
             act_logits = cascade_act_logits
         

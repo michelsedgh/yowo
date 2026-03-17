@@ -400,7 +400,22 @@ class MultiTaskCriterion(object):
                     tgt_bboxes=tgt_bboxes_scaled,
                 )
 
-                conf_target = fg_mask.unsqueeze(-1).float()
+                # ============================================================
+                # IoU-AWARE CONFIDENCE TARGET (YOLOv10 style)
+                # ============================================================
+                # KEY FIX: Don't use binary 0/1 targets!
+                # YOLOv10 uses IoU as the target: conf_target = IoU(pred, GT)
+                # This teaches the model that confidence = box quality.
+                # 
+                # With binary targets, O2O conf head can't learn selectivity
+                # because ALL foreground anchors get target=1, even bad ones.
+                # With IoU targets, good anchors get high targets, bad ones low.
+                # ============================================================
+                num_anchors = sum([ab.shape[0] for ab in anchors])
+                conf_target = conf_preds.new_zeros((num_anchors, 1))
+                # Foreground anchors get IoU as target (quality-aware)
+                conf_target[fg_mask] = pred_ious.unsqueeze(-1)
+                
                 box_target = tgt_bboxes_scaled[matched_gt_inds]
                 
                 # Split labels
